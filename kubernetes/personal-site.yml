@@ -8,17 +8,43 @@ metadata:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: personal-site
+  name: personal-site-blue
   namespace: personal-site
 spec:
   replicas: 2
   selector:
     matchLabels:
       app: personal-site
+      deployment: blue
   template:
     metadata:
       labels:
         app: personal-site
+        deployment: blue
+    spec:
+      containers:
+      - name: personal-site
+        image: your-registry/personal-site:latest
+        ports:
+        - containerPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: personal-site-green
+  namespace: personal-site
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: personal-site
+      deployment: green
+  template:
+    metadata:
+      labels:
+        app: personal-site
+        deployment: green
     spec:
       containers:
       - name: personal-site
@@ -30,11 +56,28 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: personal-site-service
+  name: personal-site-service-blue
   namespace: personal-site
 spec:
   selector:
     app: personal-site
+    deployment: blue
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: personal-site-service-green
+  namespace: personal-site
+spec:
+  selector:
+    app: personal-site
+    deployment: green
   ports:
     - protocol: TCP
       port: 80
@@ -50,6 +93,8 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "0"
 spec:
   tls:
   - hosts:
@@ -63,6 +108,34 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: personal-site-service
+            name: personal-site-service-blue
+            port:
+              number: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: personal-site-ingress-green
+  namespace: personal-site
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "0"
+spec:
+  tls:
+  - hosts:
+    - zaneriley.com
+    secretName: personal-site-tls
+  rules:
+  - host: zaneriley.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: personal-site-service-green
             port:
               number: 80

@@ -1,33 +1,95 @@
-```
-ssh username@server
-```
-```bash
-apt update && apt upgrade -y
-apt install -y curl apt-transport-https ca-certificates software-properties-common
+<p align="center">
+  <img src="https://github.com/zaneriley/personal-site/blob/main/logo.png" alt="Zane Riley Portfolio Logo" width="500"/>
+</p>
+
+# Personal Site Infrastructure (WIP)
+
+<p align="left">
+    <img src="https://img.shields.io/github/license/zaneriley/personal-site-infra" alt="GitHub License" />
+</p>
+
+<p align="left">
+  <a href="#introduction">Introduction</a> •
+  <a href="#features">Features</a> •
+  <a href="#technical-details">Technical Details</a> •
+  <a href="#development-and-deployment">Development and Deployment</a> •
+  <a href="#future-improvements">Future Improvements</a> •
+  <a href="#license">License</a> •
+  <a href="#contributing">Contributing</a> •
+  <a href="#contact">Contact</a>
+</p>
+
+## Introduction
+
+This repository contains the infrastructure-as-code for my personal website ([Github](https://github.com/zaneriley/personal-site)). It uses Kubernetes and FluxCD to implement GitOps  for continuous deployment and infrastructure management.
+
+## Features
+
+- GitOps-based infrastructure management using FluxCD
+- Separate configurations for staging and production
+- For production, it uses blue/green deployments
+
+```mermaid
+graph TD
+    A[Developer] -->|Push changes| B[Personal Site Repo]
+    A -->|Update infra| C[Personal Site Infra Repo]
+    B -->|Trigger build| D[CI/CD Pipeline]
+    D -->|Push image| E[Container Registry]
+    C -->|Watched by| F[FluxCD]
+    F -->|Sync| G[Kubernetes Cluster]
+    G -->|Deploy to| H[Staging Environment]
+    H -->|Manual Approval| I[Production Environment]
+    E -->|Pull image| G
+    I -->|Route traffic| J[Blue Deployment]
+    I -->|Route traffic| K[Green Deployment]
+    L[Ingress Controller] -->|Route external traffic| I
+    M[Monitoring] -->|Feedback| A
+    N[Secrets Management] -->|Provide secrets| G
+    I -->|Rollback if issues| H
 ```
 
-Install docker if you haven't already:
+## Installation
+
+<p align="left">
+  <img src="https://img.shields.io/badge/Kubernetes-326CE5?style=flat&logo=kubernetes&logoColor=white" alt="Kubernetes" />
+  <img src="https://img.shields.io/badge/FluxCD-316192?style=flat&logo=flux&logoColor=white" alt="FluxCD" />
+  <img src="https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker" />
+</p>
+
+
+### Prerequisites
+
+- Kubernetes cluster
+- kubectl configured to access your cluster
+- FluxCD installed on your cluster
+
+### Setup
+
+1. Clone the repository:
 ```bash
-if ! command -v docker &> /dev/null; then
-    curl -fsSL https://get.docker.com -o get-docker.sh
-    sh get-docker.sh
-    usermod -aG docker $USER
-    systemctl enable docker
-    systemctl start docker
-else
-    echo "Docker is already installed."
-fi
+git clone https://github.com/zaneriley/personal-site-infra.git
 ```
 
+2. Update the `personal-site.yml` file with your correct image registry and version.
+
+3. Apply the FluxCD configuration:
 ```bash
-if ! command -v k3s &> /dev/null; then
-    curl -sfL https://get.k3s.io | sh -
-    mkdir -p ~/.kube
-    sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
-    sudo chown $(id -u):$(id -g) ~/.kube/config
-else
-    echo "k3s is already installed."
-fi
+kubectl apply -f kubernetes/flux-systems/flux-system.yml
 ```
 
-Install flux cli:
+4. FluxCD will automatically sync the repository and apply the configurations.
+
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+Contributions are welcome! 
+
+## Contact
+
+Zane Riley - [GitHub](https://github.com/zaneriley)
+Personal Site - [GitHub](https://github.com/zaneriley/personal-site) [Website](https://zaneriley.com)
+Project Link: [https://github.com/zaneriley/personal-site-infra](https://github.com/zaneriley/personal-site-infra)
