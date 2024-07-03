@@ -11,20 +11,12 @@ provider "digitalocean" {
   token = var.do_token
 }
 
-# New Droplet
-# resource digitalocean_droplet k3s_server {
-#   image    = "ubuntu-20-04-x64"
-#   name     = "k3s-server"
-#   region   = "nyc3"
-#   size     = "s-2vcpu-2gb"
-# }
-
 # Existing Droplet
-data digitalocean_droplet existing {
+data "digitalocean_droplet" "existing" {
   name = "remote-homelab"
 }
 
-output droplet_ip {
+output "droplet_ip" {
   value = data.digitalocean_droplet.existing.ipv4_address
 }
 
@@ -38,4 +30,29 @@ output "all_droplets" {
       tags = droplet.tags
     }
   }
+}
+
+resource "null_resource" "install_k3s" {
+  connection {
+    type        = "ssh"
+    user        = "root"
+    private_key = file("~/.ssh/id_rsa")  # Adjust this path as needed
+    host        = data.digitalocean_droplet.existing.ipv4_address
+  }
+
+  provisioner "file" {
+    source      = "${path.module}/../scripts/install_k3s.sh"
+    destination = "/root/install_k3s.sh"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "chmod +x /root/install_k3s.sh",
+      "/root/install_k3s.sh",
+    ]
+  }
+}
+
+output "kubeconfig" {
+  value = null_resource.install_k3s.id != "" ? "Run 'ssh root@${data.digitalocean_droplet.existing.ipv4_address} cat /etc/rancher/k3s/k3s.yaml' to get the kubeconfig" : ""
 }
