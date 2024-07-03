@@ -1,0 +1,31 @@
+# Sensitive files
+.env
+
+# System files
+.DS_Store
+Thumbs.db
+*.log
+
+# Python virtual environments
+venv/
+.venv/
+
+# Ansible
+*.retry
+
+# Kubernetes
+~/.kube/config
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Temporary files
+*.tmp
+*.swp
+*.bak
+
+# Docker
+docker-compose.override.yml
+docker-compose.override.yaml
