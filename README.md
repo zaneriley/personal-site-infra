@@ -70,6 +70,13 @@ graph TD
 git clone https://github.com/zaneriley/personal-site-infra.git
 ```
 
+2. Set up kubeseal on your local machine. For example, on Ubuntu:
+```bash
+wget https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.18.0/kubeseal-0.18.0-linux-amd64.tar.gz
+tar -xvzf kubeseal-0.18.0-linux-amd64.tar.gz kubeseal
+sudo install -m 755 kubeseal /usr/local/bin/kubeseal
+```
+
 2. Update the `personal-site.yml` file with your correct image registry and version.
 
 3. Apply the FluxCD configuration:
