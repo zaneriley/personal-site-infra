@@ -21,7 +21,12 @@
 
 ## Introduction
 
-This repository contains the infrastructure-as-code for my personal website ([Github](https://github.com/zaneriley/personal-site)). It uses Kubernetes and FluxCD to implement GitOps  for continuous deployment and infrastructure management.
+Infrastructure-as-code for my personal website ([Github](https://github.com/zaneriley/personal-site)). It uses Kubernetes and FluxCD  for continuous deployment and infrastructure management. It's an over the top way to launch what is essentially a static website. B
+
+**Why all this for a website?**
+- It's a personal website, so why not? It's one of the few times you can build what you want without compromises. 
+- It'll be reusable for future app development
+- This is also a homelab project. 
 
 ## Features
 
@@ -31,7 +36,7 @@ This repository contains the infrastructure-as-code for my personal website ([Gi
 
 ```mermaid
 graph TD
-    A[Developer] -->|Push changes| B[Personal Site Repo]
+    A[Me] -->|Push changes| B[Personal Site Repo]
     A -->|Update infra| C[Personal Site Infra Repo]
     B -->|Trigger build| D[CI/CD Pipeline]
     D -->|Push image| E[Container Registry]
@@ -43,7 +48,6 @@ graph TD
     I -->|Route traffic| J[Blue Deployment]
     I -->|Route traffic| K[Green Deployment]
     L[Ingress Controller] -->|Route external traffic| I
-    M[Monitoring] -->|Feedback| A
     N[Secrets Management] -->|Provide secrets| G
     I -->|Rollback if issues| H
 ```
@@ -91,12 +95,10 @@ kubectl apply -f kubernetes/flux-systems/flux-system.yml
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-## Contributing
-
-Contributions are welcome! 
-
 ## Contact
 
 Zane Riley - [GitHub](https://github.com/zaneriley)
+
 Personal Site - [GitHub](https://github.com/zaneriley/personal-site) [Website](https://zaneriley.com)
+
 Project Link: [https://github.com/zaneriley/personal-site-infra](https://github.com/zaneriley/personal-site-infra)
