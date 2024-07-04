@@ -8,25 +8,44 @@ metadata:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: personal-site-blue
+  name: personal-site
   namespace: personal-site
 spec:
   replicas: 2
   selector:
     matchLabels:
       app: personal-site
-      deployment: blue
   template:
     metadata:
       labels:
         app: personal-site
-        deployment: blue
     spec:
       containers:
       - name: personal-site
-        image: your-registry/personal-site:latest
+        image: ghcr.io/zaneriley/personal-site:latest
         ports:
         - containerPort: 8000
+        env:
+        - name: SECRET_KEY_BASE
+          valueFrom:
+            secretKeyRef:
+              name: personal-site-secrets
+              key: secret-key-base
+        - name: DEV_TOKEN_SALT
+          valueFrom:
+            secretKeyRef:
+              name: personal-site-secrets
+              key: dev-token-salt
+        - name: PROD_TOKEN_SALT
+          valueFrom:
+            secretKeyRef:
+              name: personal-site-secrets
+              key: prod-token-salt
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: personal-site-secrets
+              key: postgres-password
 
 ---
 apiVersion: apps/v1
@@ -39,34 +58,52 @@ spec:
   selector:
     matchLabels:
       app: personal-site
-      deployment: green
   template:
     metadata:
       labels:
         app: personal-site
-        deployment: green
     spec:
       containers:
       - name: personal-site
-        image: your-registry/personal-site:latest
+        image: ghcr.io/zaneriley/personal-site:latest
         ports:
         - containerPort: 8000
+        env:
+        - name: SECRET_KEY_BASE
+          valueFrom:
+            secretKeyRef:
+              name: personal-site-secrets
+              key: secret-key-base
+        - name: DEV_TOKEN_SALT
+          valueFrom:
+            secretKeyRef:
+              name: personal-site-secrets
+              key: dev-token-salt
+        - name: PROD_TOKEN_SALT
+          valueFrom:
+            secretKeyRef:
+              name: personal-site-secrets
+              key: prod-token-salt
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: personal-site-secrets
+              key: postgres-password
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: personal-site-service-blue
+  name: personal-site-service
   namespace: personal-site
 spec:
   selector:
     app: personal-site
-    deployment: blue
   ports:
     - protocol: TCP
       port: 80
       targetPort: 8000
-  type: ClusterIP
+  type: NodePort
 
 ---
 apiVersion: v1
@@ -75,13 +112,11 @@ metadata:
   name: personal-site-service-green
   namespace: personal-site
 spec:
-  selector:
-    app: personal-site
-    deployment: green
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 8000
+  containers:
+  - name: personal-site
+    image: ghcr.io/zaneriley/personal-site:latest  # Update this line
+    ports:
+    - containerPort: 8000
   type: ClusterIP
 
 ---
