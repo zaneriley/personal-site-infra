@@ -46,3 +46,35 @@ if ! sudo cat /etc/rancher/k3s/k3s.yaml > kubeconfig.yaml; then
 fi
 
 log "k3s installation completed successfully"
+
+# Install Helm
+log "Installing Helm"
+if ! curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash; then
+    log "Failed to install Helm"
+    exit 1
+fi
+log "Helm installation completed successfully"
+
+# Add Sealed Secrets repository
+log "Adding Sealed Secrets Helm repository"
+if ! helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets; then
+    log "Failed to add Sealed Secrets Helm repository"
+    exit 1
+fi
+
+# Update Helm repositories
+log "Updating Helm repositories"
+if ! helm repo update; then
+    log "Failed to update Helm repositories"
+    exit 1
+fi
+
+# Install Sealed Secrets controller
+log "Installing Sealed Secrets controller"
+if ! helm install sealed-secrets sealed-secrets/sealed-secrets -n kube-system; then
+    log "Failed to install Sealed Secrets controller"
+    exit 1
+fi
+log "Sealed Secrets controller installation completed successfully"
+
+log "All installations completed successfully"
