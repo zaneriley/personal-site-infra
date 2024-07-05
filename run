@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Define color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+# Helper function for logging
+log() {
+    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
+}
+
+# Helper function for error logging
+error() {
+    echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}" >&2
+}
+
+# Helper function for warnings
+warn() {
+    echo -e "${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] WARNING: $1${NC}"
+}
+
+# Function to check and install dependencies
+check_dependencies() {
+    
+    # LOGIC HERE
+    log "All dependencies are installed."
+}
+
+# Function to set up the development environment
+setup() {
+    log "Setting up development environment..."
+    
+    # Check if GITHUB_USER is provided
+    if [ -z "${1:-}" ]; then
+        error "GITHUB_USER is required for setup. Usage: ./run setup <GITHUB_USER> [OPTIONS]"
+        exit 1
+    fi
+    
+    # Set a user-writable log file location
+    export K3S_INSTALL_LOG_FILE="$HOME/k3s_install.log"
+    
+    # Run the install-setup.sh script with error handling
+    if ! ./scripts/install-setup.sh "$@"; then
+        error "Setup failed. Check the log file at $K3S_INSTALL_LOG_FILE for details."
+        exit 1
+    fi
+    
+    log "Development environment setup complete."
+}
+# Function to start development environment
+dev() {
+    log "Starting development environment..."
+    check_dependencies
+    kubectl apply -k .
+    log "Development environment started. You can now access your services."
+}
+
+# Function to run tests
+test() {
+    log "Running tests..."
+    
+    # LOGIC HERE
+
+    log "All tests completed successfully."
+}
+
+# Function to deploy
+deploy() {
+    local env=${1:-local}
+    log "Deploying to $env environment..."
+    
+    # LOGIC HERE
+    
+    log "Deployment to $env completed."
+}
+
+# Function to implement canary deployment
+canary() {
+    local percentage=${1:-10}
+    log "Implementing canary deployment with $percentage% traffic..."
+    ./scripts/canary-deploy.sh "$percentage"
+    log "Canary deployment completed. Monitor closely and use './run switch' to fully switch or rollback."
+}
+
+# Function to switch deployment
+switch() {
+    log "Switching deployment..."
+    ./scripts/switch-deployment.sh
+    log "Deployment switched."
+}
+
+# Function to display logs and metrics
+monitor() {
+    log "Displaying logs and metrics..."
+    kubectl get pods -A
+    kubectl top nodes
+    kubectl top pods -A
+    log "Use 'kubectl logs <pod-name>' for specific pod logs."
+}
+
+# Function to clean up resources
+cleanup() {
+    log "Cleaning up resources..."
+    sudo systemctl stop k3s
+    sudo /usr/local/bin/k3s-uninstall.sh
+    rm -f kubeconfig.yaml
+    log "Cleanup completed."
+}
+
+# Help function
+show_help() {
+    echo "Usage: ./run [command]"
+    echo "Commands:"
+    echo "  setup         - Set up the development environment"
+    echo "  dev           - Start the development environment"
+    echo "  test          - Run all tests"
+    echo "  deploy [env]  - Deploy to specified environment (local, staging, production)"
+    echo "  canary [%]    - Implement canary deployment with specified percentage"
+    echo "  switch        - Switch deployment (use after canary)"
+    echo "  monitor       - Display logs and metrics"
+    echo "  cleanup       - Remove all created resources"
+    echo "  help          - Show this help message"
+}
+
+# Main script execution
+case "${1:-help}" in
+    setup)
+        if [ -z "${2:-}" ]; then
+            error "GITHUB_USER is required for setup. Usage: ./run setup <GITHUB_USER> [OPTIONS]"
+            exit 1
+        fi
+        setup "${@:2}"  # Pass all arguments except 'setup' to the setup function
+        ;;
+    dev)
+        dev
+        ;;
+    test)
+        test
+        ;;
+    deploy)
+        deploy "${2:-local}"
+        ;;
+    canary)
+        canary "${2:-10}"
+        ;;
+    switch)
+        switch
+        ;;
+    monitor)
+        monitor
+        ;;
+    cleanup)
+        cleanup
+        ;;
+    help)
+        show_help
+        ;;
+    *)
+        error "Invalid command. Use './run help' for usage information."
+        exit 1
+        ;;
+esac
