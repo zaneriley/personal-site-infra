@@ -1,0 +1,15 @@
+{
+    "packages": {
+      ".": {
+        "changelog-path": "CHANGELOG.md",
+        "changelog-type": "github",
+        "release-type": "simple",
+        "bump-minor-pre-major": true,
+        "bump-patch-for-minor-pre-major": true,
+        "draft": false,
+        "prerelease": false,
+        "initial-version": "0.1.0"
+      }
+    },
+    "$schema": "https://raw.githubusercontent.com/google-github-actions/release-please-action/main/schema.json"
+  }

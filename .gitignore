@@ -62,5 +62,5 @@ kubeconfig.*
 
 
 # Docker
-docker-compose.override.yml
+docker-compose.override.yaml
 docker-compose.override.yaml
