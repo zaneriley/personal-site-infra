@@ -371,7 +371,6 @@ print_summary() {
 
 
 
-# Update the main function
 main() {
     while getopts "vqijf:h" opt; do
         case ${opt} in
@@ -388,8 +387,6 @@ main() {
     if [ ${#targets[@]} -eq 0 ]; then
         targets=($(find . -name "*.yaml" -type f))
     fi
-
-    local tests_run=false
 
     # Run ShellCheck
     run_shellcheck
