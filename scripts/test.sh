@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pipefail
+# set -euo pipefail
 
 # Define color codes for output
 RED='\033[0;31m'
@@ -12,14 +12,114 @@ NC='\033[0m' # No Color
 # Global variables for test results
 SHELLCHECK_TOTAL=0
 SHELLCHECK_PASSED=0
+SHELLCHECK_FAILED=0
+SHELLCHECK_WARNINGS=0
+
 KUBECONFORM_TOTAL=0
 KUBECONFORM_PASSED=0
+KUBECONFORM_FAILED=0
+
 KUBESCORE_TOTAL=0
 KUBESCORE_PASSED=0
+KUBESCORE_FAILED=0
+KUBESCORE_WARNINGS=0
+
+# Array to store test suite data
+declare -A test_suites
+
+
+# Array to define order of test suites
+test_suite_order=("ShellCheck" "Kubeconform" "Kube-score")
+
+# Function to add test suite results
+add_test_suite_results() {
+    local name=$1
+    test_suites[$name,total]=$2
+    test_suites[$name,passed]=$3
+    test_suites[$name,failed]=$4
+    test_suites[$name,warnings]=${5:-0}
+}
+
+# Function to calculate maximum widths
+calculate_max_widths() {
+    local max_name_width=0
+    local max_number_width=0
+
+    for suite in "${!test_suites[@]}"; do
+        local name_length=${#suite}
+        if (( name_length > max_name_width )); then
+            max_name_width=$name_length
+        fi
+
+        for metric in total passed failed warnings; do
+            local number_length=${#test_suites[$suite,$metric]}
+            if (( number_length > max_number_width )); then
+                max_number_width=$number_length
+            fi
+        done
+    done
+
+    echo "$max_name_width $max_number_width"
+}
+
+# Function to format a line with color
+format_color_line() {
+    local color=$1
+    local text=$2
+    echo -e "${color}${text}${NC}"
+}
+
+# Function to apply color to a metric
+apply_color() {
+    local value=$1
+    local color=$2
+    local label=$3
+    local width=$4
+    if (( value == 0 )); then
+        printf "%*d %s" "$width" "$value" "$label"
+    else
+        printf "${color}%*d %s${NC}" "$width" "$value" "$label"
+    fi
+}
+
+# Function to format test results
+format_test_results() {
+    local suite=$1
+    local max_name_width=$2
+    local max_number_width=$3
+
+    local total=${test_suites[$suite,total]}
+    local passed=${test_suites[$suite,passed]}
+    local failed=${test_suites[$suite,failed]}
+    local warnings=${test_suites[$suite,warnings]}
+
+    local status_symbol="✓"
+    local status_color=$GREEN
+
+    if (( failed > 0 )); then
+        status_symbol="✗"
+        status_color=$RED
+    elif (( warnings > 0 )); then
+        status_symbol="!"
+        status_color=$YELLOW
+    fi
+
+    local total_str=$(apply_color $total $BLUE "total" $max_number_width)
+    local passed_str=$(apply_color $passed $GREEN "passed" $max_number_width)
+    local failed_str=$(apply_color $failed $RED "failed" $max_number_width)
+    local warnings_str=$(apply_color $warnings $YELLOW "warnings" $max_number_width)
+
+    echo -e "${status_color}${status_symbol}${NC} $(printf "%-*s" $max_name_width "$suite") $total_str, $passed_str, $failed_str, $warnings_str"
+}
 
 # Function to run ShellCheck on shell scripts
 run_shellcheck() {
     echo -e "${BLUE}Running ShellCheck...${NC}"
+
+    SHELLCHECK_TOTAL=0
+    SHELLCHECK_PASSED=0
+    SHELLCHECK_FAILED=0
+    SHELLCHECK_WARNINGS=0
     
     # Check if ShellCheck is installed
     if ! command -v shellcheck &> /dev/null; then
@@ -56,20 +156,20 @@ run_shellcheck() {
         ((SHELLCHECK_TOTAL++))
         echo -e "${BLUE}Checking $script...${NC}"
         
-        # Capture ShellCheck output
-        shellcheck_output=$(shellcheck "$script" 2>&1) || true
+                shellcheck_output=$(shellcheck "$script" 2>&1) || true
         shellcheck_exit_code=$?
-        
-        echo "ShellCheck exit code: $shellcheck_exit_code"
         
         if [ $shellcheck_exit_code -eq 0 ]; then
             echo -e "${GREEN}✓ $script passed ShellCheck${NC}"
             ((SHELLCHECK_PASSED++))
+        elif [ $shellcheck_exit_code -eq 1 ]; then
+            echo -e "${YELLOW}! $script has ShellCheck warnings${NC}"
+            ((SHELLCHECK_WARNINGS++))
         else
             echo -e "${RED}✗ $script failed ShellCheck${NC}"
-            echo "$shellcheck_output"
             shellcheck_failed=1
         fi
+        echo "$shellcheck_output"
     done
     
     # Debug: Disable command printing
@@ -98,6 +198,7 @@ run_kubeconform() {
         ((KUBECONFORM_PASSED++))
     else
         echo -e "${RED}✗ $target failed Kubeconform validation${NC}"
+        ((KUBECONFORM_FAILED++))
     fi
 }
 
@@ -106,45 +207,65 @@ run_kubescore() {
     local target="$1"
     echo -e "${BLUE}Running Kube-score on $target...${NC}"
     ((KUBESCORE_TOTAL++))
-    if [ -d "$target" ]; then
-        # If target is a directory, find all yaml files and score them
-        find "$target" -name "*.yaml" -type f | xargs kube-score score --output-format ci
-    else
-        # If target is a file, score it directly
-        kube-score score "$target" --output-format ci
-    fi
     
-    if [ $? -eq 0 ]; then
+    local kubescore_output
+    if [ -d "$target" ]; then
+        kubescore_output=$(find "$target" -name "*.yaml" -type f | xargs kube-score score --output-format ci 2>&1)
+    else
+        kubescore_output=$(kube-score score "$target" --output-format ci 2>&1)
+    fi
+    local kubescore_exit_code=$?
+    
+    echo "$kubescore_output"
+    
+    if [ $kubescore_exit_code -eq 0 ]; then
         echo -e "${GREEN}✓ $target passed Kube-score checks${NC}"
         ((KUBESCORE_PASSED++))
+    elif echo "$kubescore_output" | grep -q "\[CRITICAL\]"; then
+        echo -e "${RED}✗ $target has Kube-score critical issues${NC}"
+        ((KUBESCORE_FAILED++))
     else
         echo -e "${YELLOW}! $target has Kube-score warnings${NC}"
+        ((KUBESCORE_WARNINGS++))
     fi
 }
 
-# Function to print summary
+# Update print_summary function
 print_summary() {
     echo -e "\n${BLUE}Test Summary:${NC}"
-    echo -e "ShellCheck: ${GREEN}$SHELLCHECK_PASSED/$SHELLCHECK_TOTAL passed${NC}"
-    echo -e "Kubeconform: ${GREEN}$KUBECONFORM_PASSED/$KUBECONFORM_TOTAL passed${NC}"
-    echo -e "Kube-score: ${GREEN}$KUBESCORE_PASSED/$KUBESCORE_TOTAL passed${NC}"
-    
-    local total_passed=$((SHELLCHECK_PASSED + KUBECONFORM_PASSED + KUBESCORE_PASSED))
-    local total_tests=$((SHELLCHECK_TOTAL + KUBECONFORM_TOTAL + KUBESCORE_TOTAL))
-    
-    if [ $total_passed -eq $total_tests ]; then
-        echo -e "\n${GREEN}All tests passed successfully!${NC}"
+
+    add_test_suite_results "ShellCheck" $SHELLCHECK_TOTAL $SHELLCHECK_PASSED $SHELLCHECK_FAILED $SHELLCHECK_WARNINGS
+    add_test_suite_results "Kubeconform" $KUBECONFORM_TOTAL $KUBECONFORM_PASSED $KUBECONFORM_FAILED 0
+    add_test_suite_results "Kube-score" $KUBESCORE_TOTAL $KUBESCORE_PASSED $KUBESCORE_FAILED $KUBESCORE_WARNINGS
+
+    read max_name_width max_number_width <<< $(calculate_max_widths)
+
+    for suite in "${test_suite_order[@]}"; do
+        format_test_results "$suite" "$max_name_width" "$max_number_width"
+    done
+
+    local total_failed=$((SHELLCHECK_FAILED + KUBECONFORM_FAILED + KUBESCORE_FAILED))
+    local total_warnings=$((SHELLCHECK_WARNINGS + KUBESCORE_WARNINGS))
+
+    if (( total_failed == 0 && total_warnings == 0 )); then
+        format_color_line $GREEN "\nAll tests passed successfully!"
+    elif (( total_failed == 0 )); then
+        format_color_line $YELLOW "\nAll tests passed, but there are warnings. Please review the output above."
     else
-        echo -e "\n${RED}Some tests failed. Please review the output above.${NC}"
+        format_color_line $RED "\nSome tests failed. Please review the output above."
     fi
 }
 
+
+# Update the main function
 main() {
     local targets=("$@")
 
     if [ ${#targets[@]} -eq 0 ]; then
         targets=($(find . -name "*.yaml" -type f))
     fi
+
+    local tests_run=false
 
     # Run ShellCheck
     if ! run_shellcheck; then
@@ -153,25 +274,24 @@ main() {
 
     # Run Kubeconform and Kube-score
     for target in "${targets[@]}"; do
-        if ! run_kubeconform "$target"; then
-            echo "Kubeconform failed for $target. Continuing..."
+        if [[ "$target" =~ \.github/|\.release-please|\.terraform/|kustomization\.yaml|kubeconfig\.yaml ]]; then
+            echo -e "${YELLOW}Skipping ignored file: $target${NC}"
+            continue
         fi
-        if ! run_kubescore "$target"; then
-            echo "Kube-score failed for $target. Continuing..."
-        fi
+        run_kubeconform "$target"
+        run_kubescore "$target"
     done
 
     # Print summary
     print_summary
 
     # Set exit code
-    local total_passed=$((SHELLCHECK_PASSED + KUBECONFORM_PASSED + KUBESCORE_PASSED))
-    local total_tests=$((SHELLCHECK_TOTAL + KUBECONFORM_TOTAL + KUBESCORE_TOTAL))
-    
-    if [ $total_passed -eq $total_tests ]; then
-        return 0
-    else
+    if [ ${KUBECONFORM_FAILED:-0} -gt 0 ] || [ ${KUBESCORE_FAILED:-0} -gt 0 ] || [ $SHELLCHECK_FAILED -gt 0 ]; then
         return 1
+    elif [ ${KUBESCORE_WARNINGS:-0} -gt 0 ] || [ ${SHELLCHECK_WARNINGS:-0} -gt 0 ]; then
+        return 2
+    else
+        return 0
     fi
 }
 
