@@ -11,8 +11,6 @@ NC='\033[0m' # No Color
 
 # Global variables
 VERBOSITY=1 # 0: quiet, 1: normal, 2: verbose
-INTERACTIVE=false
-JSON_OUTPUT=false
 FILTER=""
 
 SHELLCHECK_OUTPUT=""
@@ -64,10 +62,14 @@ print_suite_summary() {
 }
 
 time_command() {
-    local start_time=$(date +%s.%N)
+    local start_time
+    local end_time
+    local duration
+
+    start_time=$(date +%s.%N)
     "$@"
-    local end_time=$(date +%s.%N)
-    local duration=$(echo "$end_time - $start_time" | bc)
+    end_time=$(date +%s.%N)
+    duration=$(echo "$end_time - $start_time" | bc)
     log 2 "${YELLOW}Execution time: ${duration} seconds${NC}"
 }
 
@@ -90,7 +92,7 @@ format_error() {
 
 prompt_for_fix() {
     local script=$1
-    read -p "Do you want to fix issues in $script now? (y/n) " -n 1 -r
+    read -p "Do you want to fix issues in ""$script"" now? (y/n) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         $EDITOR "$script"
@@ -178,7 +180,7 @@ format_test_results() {
     if (( warnings > 0 )); then warnings_color=$YELLOW; fi
 
     printf "${status_color}%s${NC} %-*s %*d total, ${passed_color}%d passed${NC}, ${failed_color}%d failed${NC}, ${warnings_color}%d warnings${NC}\n" \
-        "$status_symbol" $max_name_width "$suite" $max_number_width $total $passed $failed $warnings
+        "$status_symbol" "$max_name_width" "$suite" "$max_number_width" "$total" "$passed" "$failed" "$warnings"
 }
 
 debug_print() {
@@ -196,6 +198,7 @@ run_shellcheck() {
 
     SHELLCHECK_TOTAL=$total_scripts
     SHELLCHECK_PASSED=0
+    SHELLCHECK_FIXED=0
     SHELLCHECK_FAILED=0
     SHELLCHECK_WARNINGS=0
     SHELLCHECK_INFO=0
@@ -210,32 +213,31 @@ run_shellcheck() {
         shellcheck_output=$(shellcheck -f gcc "$script" 2>&1)
         local shellcheck_exit_code=$?
 
-        local error_count
         local warning_count
         local info_count
-        error_count=$(echo "$shellcheck_output" | grep -c ": error:")
         warning_count=$(echo "$shellcheck_output" | grep -c ": warning:")
         info_count=$(echo "$shellcheck_output" | grep -c ": note:")
 
-        if [ $shellcheck_exit_code -eq 0 ] && [ $warning_count -eq 0 ] && [ $info_count -eq 0 ]; then
+        if [ $shellcheck_exit_code -eq 0 ] && [ "$warning_count" -eq 0 ] && [ "$info_count" -eq 0 ]; then
             ((SHELLCHECK_PASSED++))
             SHELLCHECK_OUTPUT+="✓ $script passed ShellCheck\n"
-        elif [ $error_count -gt 0 ]; then
-            ((SHELLCHECK_FAILED++))
-            SHELLCHECK_OUTPUT+="✗ $script failed ShellCheck\n"
-            SHELLCHECK_OUTPUT+="$shellcheck_output\n"
         else
-            ((SHELLCHECK_WARNINGS++))
-            SHELLCHECK_OUTPUT+="! $script has ShellCheck warnings or info\n"
-            SHELLCHECK_OUTPUT+="$shellcheck_output\n"
+            # Generate diff and apply fixes
+            local diff_output
+            diff_output=$(shellcheck -f diff "$script")
+            if [ -n "$diff_output" ]; then
+                echo "$diff_output" | patch -p1 "$script"
+                ((SHELLCHECK_FIXED++))
+                SHELLCHECK_OUTPUT+="✓ $script fixed by ShellCheck\n"
+            else
+                ((SHELLCHECK_FAILED++))
+                SHELLCHECK_OUTPUT+="✗ $script failed ShellCheck and couldn't be automatically fixed\n"
+                SHELLCHECK_OUTPUT+="$shellcheck_output\n"
+            fi
         fi
 
         ((SHELLCHECK_WARNINGS += warning_count))
         ((SHELLCHECK_INFO += info_count))
-
-        if [[ $INTERACTIVE == true && $shellcheck_exit_code != 0 ]]; then
-            prompt_for_fix "$script"
-        fi
     done
     
     echo # New line after progress bar
@@ -252,11 +254,13 @@ run_kubeconform() {
     KUBECONFORM_OUTPUT="Running Kubeconform...\n"
 
     # Run Kubeconform on all files at once
-    local output=$(kubeconform -summary -verbose -output text "${files[@]}" 2>&1)
-    local exit_code=$?
+    local output
+    output=$(kubeconform -summary -verbose -output text "${files[@]}" 2>&1)
+
 
     # Extract summary line
-    local summary=$(echo "$output" | tail -n 1)
+    local summary
+    summary=$(echo "$output" | tail -n 1)
 
     # Parse summary
     if [[ $summary =~ ([0-9]+)[[:space:]]resources[[:space:]]found[[:space:]]in[[:space:]]([0-9]+)[[:space:]]files[[:space:]]-[[:space:]]Valid:[[:space:]]([0-9]+),[[:space:]]Invalid:[[:space:]]([0-9]+),[[:space:]]Errors:[[:space:]]([0-9]+),[[:space:]]Skipped:[[:space:]]([0-9]+) ]]; then
@@ -265,7 +269,6 @@ run_kubeconform() {
         local valid_resources="${BASH_REMATCH[3]}"
         local invalid_resources="${BASH_REMATCH[4]}"
         local error_resources="${BASH_REMATCH[5]}"
-        local skipped_resources="${BASH_REMATCH[6]}"
 
         KUBECONFORM_TOTAL=$total_resources
         KUBECONFORM_PASSED=$valid_resources
@@ -297,20 +300,23 @@ run_kubescore() {
 
     for file in "${files[@]}"; do
         ((validated_files++))
-        show_progress $validated_files $total_files "Kube-score"
+        show_progress "$validated_files" "$total_files" "Kube-score"
 
-        local output=$(kube-score score "$file" 2>&1)
-        local exit_code=$?
+        local output
+        output=$(kube-score score "$file" 2>&1)
 
-        local critical_count=$(echo "$output" | grep -c "\[CRITICAL\]")
-        local warning_count=$(echo "$output" | grep -c "\[WARN\]")
+
+        local critical_count
+        critical_count=$(echo "$output" | grep -c "\[CRITICAL\]")
+        local warning_count
+        warning_count=$(echo "$output" | grep -c "\[WARN\]")
 
         ((KUBESCORE_TOTAL++))
 
-        if [ $critical_count -eq 0 ] && [ $warning_count -eq 0 ]; then
+        if [ "$critical_count" -eq 0 ] && [ "$warning_count" -eq 0 ]; then
             ((KUBESCORE_PASSED++))
             KUBESCORE_OUTPUT+="✓ $file passed Kube-score\n"
-        elif [ $critical_count -eq 0 ]; then
+        elif [ "$critical_count" -eq 0 ]; then
             ((KUBESCORE_WARNINGS++))
             KUBESCORE_OUTPUT+="! $file has Kube-score warnings\n"
         else
@@ -352,9 +358,9 @@ print_test_results() {
 print_summary() {
     echo -e "\n${BLUE}Test Summary:${NC}"
 
-    add_test_suite_results "ShellCheck" $SHELLCHECK_TOTAL $SHELLCHECK_PASSED $SHELLCHECK_FAILED $SHELLCHECK_WARNINGS
+    add_test_suite_results "ShellCheck" "$SHELLCHECK_TOTAL" "$SHELLCHECK_PASSED" "$SHELLCHECK_FAILED" $SHELLCHECK_WARNINGS
     add_test_suite_results "Kubeconform" $KUBECONFORM_TOTAL $KUBECONFORM_PASSED $KUBECONFORM_FAILED 0
-    add_test_suite_results "Kube-score" $KUBESCORE_TOTAL $KUBESCORE_PASSED $KUBESCORE_FAILED $KUBESCORE_WARNINGS
+    add_test_suite_results "Kube-score" "$KUBESCORE_TOTAL" "$KUBESCORE_PASSED" "$KUBESCORE_FAILED" $KUBESCORE_WARNINGS
 
     read max_name_width max_number_width <<< $(calculate_max_widths)
 
@@ -369,9 +375,6 @@ main() {
         case ${opt} in
             v ) VERBOSITY=2 ;;
             q ) VERBOSITY=0 ;;
-            i ) INTERACTIVE=true ;;
-            j ) JSON_OUTPUT=true ;;
-            f ) FILTER=$OPTARG ;;
             h ) usage; exit 0 ;;
             \? ) usage; exit 1 ;;
         esac
