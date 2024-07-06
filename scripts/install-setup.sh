@@ -5,11 +5,8 @@ set -euo pipefail
 GITHUB_USER=""
 
 # Configuration variables
-K3S_VERSION="v1.21.0+k3s1"
-FLUX_VERSION="0.15.0"
-HELM_VERSION="v3.6.0"
-KUBECONFORM_VERSION="0.6.3"
-KUBESCORE_VERSION="1.14.0"
+KUBECONFORM_VERSION="0.6.6"
+KUBESCORE_VERSION="v1.18.0"
 
 LOG_FILE="${K3S_INSTALL_LOG_FILE:-/tmp/k3s_install.log}"
 
@@ -195,6 +192,7 @@ install_kubescore() {
 usage() {
     echo "Usage: $0 [OPTIONS] <GITHUB_USER>"
     echo "Options:"
+    echo "  --skip-shellcheck  Skip ShellCheck installation"
     echo "  --skip-k3s         Skip K3s installation"
     echo "  --skip-flux        Skip FluxCD installation"
     echo "  --skip-helm        Skip Helm installation"
@@ -207,6 +205,7 @@ usage() {
 
 # Main script execution
 main() {
+    local skip_shellcheck=false
     local skip_k3s=false
     local skip_flux=false
     local skip_helm=false
@@ -218,6 +217,7 @@ main() {
     # Parse command-line options
     while [[ $# -gt 0 ]]; do
         case $1 in
+            --skip-shellcheck) skip_shellcheck=true ;;
             --skip-k3s) skip_k3s=true ;;
             --skip-flux) skip_flux=true ;;
             --skip-helm) skip_helm=true ;;
@@ -246,6 +246,7 @@ main() {
     fi
 
     # Run installation steps
+    $skip_shellcheck || install_shellcheck || handle_error $LINENO
     $skip_k3s || install_k3s || handle_error $LINENO
     $skip_flux || install_flux || handle_error $LINENO
     $skip_helm || install_helm || handle_error $LINENO

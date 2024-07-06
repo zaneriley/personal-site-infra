@@ -63,7 +63,13 @@ dev() {
 test() {
     log "Running tests..."
     
-    # LOGIC HERE
+    # Run Kubeconform tests
+    if ./scripts/test.sh; then
+        log "All Kubeconform tests passed successfully."
+    else
+        error "Some Kubeconform tests failed. Please review the output above."
+        return 1
+    fi
 
     log "All tests completed successfully."
 }
