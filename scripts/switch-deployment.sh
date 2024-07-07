@@ -14,7 +14,7 @@ kubectl patch ingress personal-site -n personal-site --type=json \
 
 # Update the canary ingress to point to the other service
 kubectl patch ingress personal-site-canary -n personal-site --type=json \
-  -p='[{"op": "replace", "path": "/spec/rules/0/http/paths/0/backend/service/name", "value":"'$current_backend'"}]'
+  -p='[{"op": "replace", "path": "/spec/rules/0/http/paths/0/backend/service/name", "value":"'"$current_backend"'"}]'
 
 # Reset canary weight to 0
 kubectl patch ingress personal-site-canary -n personal-site -p '{"metadata":{"annotations":{"nginx.ingress.kubernetes.io/canary-weight":"0"}}}'

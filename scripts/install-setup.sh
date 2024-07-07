@@ -127,9 +127,10 @@ install_k3s() {
 
     log "Retrieving kubeconfig"
     sudo cp /etc/rancher/k3s/k3s.yaml kubeconfig.yaml
-    sudo chown $USER:$USER kubeconfig.yaml
+    sudo chown "$USER":"$USER" kubeconfig.yaml
     chmod 600 kubeconfig.yaml
-    export KUBECONFIG=$(pwd)/kubeconfig.yaml
+    export KUBECONFIG
+    KUBECONFIG=$(pwd)/kubeconfig.yaml
     log "k3s installation completed successfully"
 }
 
