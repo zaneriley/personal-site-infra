@@ -5,7 +5,7 @@
 # Personal Site Infrastructure (WIP)
 
 <p align="left">
-    <img src="https://img.shields.io/github/license/zaneriley/personal-site-infra" alt="GitHub License" />
+    <img src="https://img.shields.io/github/license/zaneriley/personal-site" alt="GitHub License" />
 </p>
 
 <p align="left">
@@ -67,29 +67,50 @@ graph TD
 - kubectl configured to access your cluster
 - FluxCD installed on your cluster
 
-### Setup
+### Local setup
 
 1. Clone the repository:
+    ```bash
+    git clone https://github.com/zaneriley/personal-site.git
+    ```
+
+
+1. Update the `personal-site.yaml` file with your correct image registry and version.
+
+1. Set up secrets using Bitnami's Sealed Secrets:
+   a. Create a regular Kubernetes secret YAML file locally (do not commit this file):
+
+    ```yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+    name: personal-site-secrets
+    namespace: personal-site
+    type: Opaque
+    stringData:
+        SECRET_KEY_BASE: your_secret_key_base
+        DEV_TOKEN_SALT: your_dev_token_salt
+        PROD_TOKEN_SALT: your_prod_token_salt
+        POSTGRES_PASSWORD: your_postgres_password
+    ```
+a. Use kubeseal to encrypt the secret:
+   
+   ```bash
+   kubeseal --format=yaml < secret.yaml > secret.sealed.yaml
+   ```
+b. Commit and push the `sealed-secret.yaml` file to the repository.
+
+5. Apply the FluxCD configuration:
 ```bash
-git clone https://github.com/zaneriley/personal-site-infra.git
+kubectl apply -f kubernetes/flux-systems/flux-system.yaml
 ```
-
-2. Set up kubeseal on your local machine. For example, on Ubuntu:
+You can run this to check if everything is working:
 ```bash
-wget https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.18.0/kubeseal-0.18.0-linux-amd64.tar.gz
-tar -xvzf kubeseal-0.18.0-linux-amd64.tar.gz kubeseal
-sudo install -m 755 kubeseal /usr/local/bin/kubeseal
+flux get kustomizations
+flux get sources git
+flux get images all
 ```
-
-2. Update the `personal-site.yml` file with your correct image registry and version.
-
-3. Apply the FluxCD configuration:
-```bash
-kubectl apply -f kubernetes/flux-systems/flux-system.yml
-```
-
-4. FluxCD will automatically sync the repository and apply the configurations.
-
+6. FluxCD will automatically sync the repository and apply the configurations.
 
 ## License
 
@@ -101,4 +122,4 @@ Zane Riley - [GitHub](https://github.com/zaneriley)
 
 Personal Site - [GitHub](https://github.com/zaneriley/personal-site) [Website](https://zaneriley.com)
 
-Project Link: [https://github.com/zaneriley/personal-site-infra](https://github.com/zaneriley/personal-site-infra)
+Project Link: [https://github.com/zaneriley/personal-site](https://github.com/zaneriley/personal-site)
