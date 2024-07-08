@@ -11,8 +11,7 @@
 <p align="left">
   <a href="#introduction">Introduction</a> •
   <a href="#features">Features</a> •
-  <a href="#technical-details">Technical Details</a> •
-  <a href="#development-and-deployment">Development and Deployment</a> •
+  <a href="#getting-started">Getting Started</a> •
   <a href="#future-improvements">Future Improvements</a> •
   <a href="#license">License</a> •
   <a href="#contributing">Contributing</a> •
@@ -31,8 +30,9 @@ Infrastructure-as-code for my personal website ([Github](https://github.com/zane
 ## Features
 
 - GitOps-based infrastructure management using FluxCD
-- Separate configurations for staging and production
-- For production, it uses blue/green deployments
+- Blue/green deployments with ability to switch to canary deployments
+
+The deployment process looks like this (you'l need to view this on Github.com to see the diagram):
 
 ```mermaid
 graph TD
@@ -60,25 +60,23 @@ graph TD
   <img src="https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker" />
 </p>
 
-
-### Prerequisites
-
-- Kubernetes cluster
-- kubectl configured to access your cluster
-- FluxCD installed on your cluster
-
 ### Local setup
 
 1. Clone the repository:
-    ```bash
-    git clone https://github.com/zaneriley/personal-site.git
-    ```
+  ```bash
+  git clone https://github.com/zaneriley/personal-site.git
+  ```
+  
+1. Adjust the `scripts/install-setup.sh` file with your correct image registry and version.
 
-
-1. Update the `personal-site.yaml` file with your correct image registry and version.
+1. Run the setup script on your local machine to install the required tools:
+  ```bash
+    ./run setup <GITHUB_USER>
+  ```
+  You'll be prompted to enter your GitHub personal access token to enable FluxCD to access your repositories.
 
 1. Set up secrets using Bitnami's Sealed Secrets:
-   a. Create a regular Kubernetes secret YAML file locally (do not commit this file):
+   a. Create a regular Kubernetes secret YAML file locally:
 
     ```yaml
     apiVersion: v1
@@ -100,7 +98,7 @@ a. Use kubeseal to encrypt the secret:
    ```
 b. Commit and push the `sealed-secret.yaml` file to the repository.
 
-5. Apply the FluxCD configuration:
+1. Apply the FluxCD configuration:
 ```bash
 kubectl apply -f kubernetes/flux-systems/flux-system.yaml
 ```
@@ -111,6 +109,81 @@ flux get sources git
 flux get images all
 ```
 6. FluxCD will automatically sync the repository and apply the configurations.
+
+
+## Usage
+1. Apply the Kubernetes manifests:
+  ```bash
+  kubectl apply -f namespace.yaml
+  kubectl apply -f deployments.yaml
+  kubectl apply -f service-canary.yaml
+  kubectl apply -f ingress.yaml
+  ```
+1.Verify the resources are created
+  ```bash
+  kubectl get all -n personal-site
+  kubectl get ingress -n personal-site
+  ```
+1.Test accessing the app
+   - Add `personal-site.local` to your `/etc/hosts` file, pointing to your cluster IP
+   ```bash
+   echo "127.0.0.1 personal-site.local" | sudo tee -a /etc/hosts
+   ```
+   - Type `   kubectl port-forward -n ingress-nginx service/ingress-nginx-controller 8080:80`. This command forwards port 80 of the ingress controller to port 8080 on your local machine.
+   - Open a browser and navigate to `http://personal-site.local:8080`
+   - Verify you see the "Green Version" message
+
+1. Test blue/green switch:
+  ```bash
+  ./scripts/switch-deployment.sh
+  ```
+
+1. Verify the switch:
+```bash
+  kubectl get ingress personal-site -n personal-site -o jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}'
+  ```
+
+  This should now return `personal-site-blue`.
+
+7. Refresh your browser and verify you see the "Blue Version" message.
+
+8. Test canary deployment:
+  ```bash
+  ./scripts/canary-deploy.sh 20
+  ```
+
+1. Verify the canary deployment:
+  ```bash
+  kubectl get ingress personal-site-canary -n personal-site -o jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}'
+  ```
+  This should return 20
+
+1. Refresh your browser multiple times. You should see the "Blue Version" message about 80% of the time.
+
+1. Increase the weight to 100 and refresh your browser. You should see the "Green Version" message.
+
+1. Verify the main ingress has switched. 
+  ```bash
+  kubectl get ingress personal-site -n personal-site -o jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}'
+  ```
+  This should return `personal-site-green`.
+
+1. Test rollback:
+  ```bash
+  ./scripts/switch-deployment.sh
+  ```
+
+1. Verify the switch:
+  ```bash
+  kubectl get ingress personal-site -n personal-site -o jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}'
+  ```
+
+  This should now return `personal-site-blue`.
+
+1. Cleanup
+  ```bash
+  kubectl delete namespace personal-site
+  ```
 
 ## License
 
