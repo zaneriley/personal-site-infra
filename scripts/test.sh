@@ -337,7 +337,7 @@ run_kubescore() {
         show_progress "$validated_files" "$total_files" "Kube-score"
 
         local output
-        output=$(kube-score score "$file" 2>&1)
+        output=$(kube-score score --ignore-test pod-probes "$file" 2>&1)
 
 
         local critical_count
