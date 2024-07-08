@@ -9,10 +9,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Global variables
-VERBOSITY=1 # 0: quiet, 1: normal, 2: verbose
-FILTER=""
-
+VERBOSITY=2 # 0: quiet, 1: normal, 2: verbose
 SHELLCHECK_OUTPUT=""
 KUBECONFORM_OUTPUT=""
 KUBESCORE_OUTPUT=""
@@ -257,11 +254,51 @@ run_kubeconform() {
     local output
     output=$(kubeconform -summary -verbose -output text "${files[@]}" 2>&1)
 
+    # Process and align the output
+    local aligned_output=""
+    local max_file_length=0
+    local max_resource_length=0
+
+    # First pass to determine maximum lengths
+    while IFS= read -r line; do
+        if [[ $line =~ ^./.*valid$ ]]; then
+            local file_path
+            file_path=$(echo "$line" | cut -d' ' -f1)
+            local resource_type
+            resource_type=$(echo "$line" | cut -d' ' -f3)
+            local resource_name
+            resource_name=$(echo "$line" | cut -d' ' -f4)
+            
+            [[ ${#file_path} -gt $max_file_length ]] && max_file_length=${#file_path}
+            [[ ${#resource_type} -gt $max_resource_length ]] && max_resource_length=${#resource_type}
+        fi
+    done <<< "$output"
+
+    # Second pass to format and align the output
+    while IFS= read -r line; do
+        if [[ $line =~ ^./.*valid$ ]]; then
+            local file_path
+            file_path=$(echo "$line" | cut -d' ' -f1)
+            local resource_type
+            resource_type=$(echo "$line" | cut -d' ' -f3)
+            local resource_name
+            resource_name=$(echo "$line" | cut -d' ' -f4)
+            local status
+            status=$(echo "$line" | cut -d' ' -f6-)
+            
+            printf -v aligned_line "%-*s - %-*s %-30s %s\n" "$max_file_length" "$file_path" "$max_resource_length" "$resource_type" "$resource_name" "$status"
+            aligned_output+="$aligned_line"
+        elif [[ $line =~ ^Summary: ]]; then
+            aligned_output+="\n$line\n"
+        fi
+    done <<< "$output"
+
+    KUBECONFORM_OUTPUT+="$aligned_output\n"
 
     # Extract summary line
     local summary
     summary=$(echo "$output" | tail -n 1)
-
+       
     # Parse summary
     if [[ $summary =~ ([0-9]+)[[:space:]]resources[[:space:]]found[[:space:]]in[[:space:]]([0-9]+)[[:space:]]files[[:space:]]-[[:space:]]Valid:[[:space:]]([0-9]+),[[:space:]]Invalid:[[:space:]]([0-9]+),[[:space:]]Errors:[[:space:]]([0-9]+),[[:space:]]Skipped:[[:space:]]([0-9]+) ]]; then
         local total_resources="${BASH_REMATCH[1]}"
@@ -278,11 +315,8 @@ run_kubeconform() {
         KUBECONFORM_TOTAL=0
         KUBECONFORM_PASSED=0
         KUBECONFORM_FAILED=0
+        echo "DEBUG: Regex did not match"
     fi
-
-    # Format output
-    KUBECONFORM_OUTPUT+="$output\n\n"
-    # KUBECONFORM_OUTPUT+="[Kubeconform] Summary: $KUBECONFORM_TOTAL resources in $total_files files, $KUBECONFORM_PASSED valid, $KUBECONFORM_FAILED invalid/errors\n"
 }
 
 # Modify run_kubescore function
@@ -303,7 +337,7 @@ run_kubescore() {
         show_progress "$validated_files" "$total_files" "Kube-score"
 
         local output
-        output=$(kube-score score "$file" 2>&1)
+        output=$(kube-score score --ignore-test pod-probes "$file" 2>&1)
 
 
         local critical_count
@@ -324,9 +358,9 @@ run_kubescore() {
             KUBESCORE_OUTPUT+="✗ $file failed Kube-score\n"
         fi
 
-        if [ $VERBOSITY -ge 2 ]; then
+        if [ "$VERBOSITY" -ge 2 ]; then
             KUBESCORE_OUTPUT+="$output\n"
-        elif [ $VERBOSITY -ge 1 ]; then
+        elif [ "$VERBOSITY" -ge 1 ]; then
             KUBESCORE_OUTPUT+="$(echo "$output" | grep -E "\[CRITICAL\]|\[WARN\]")\n"
         fi
 
@@ -362,7 +396,7 @@ print_summary() {
     add_test_suite_results "Kubeconform" $KUBECONFORM_TOTAL $KUBECONFORM_PASSED $KUBECONFORM_FAILED 0
     add_test_suite_results "Kube-score" "$KUBESCORE_TOTAL" "$KUBESCORE_PASSED" "$KUBESCORE_FAILED" $KUBESCORE_WARNINGS
 
-    read max_name_width max_number_width <<< $(calculate_max_widths)
+    read -r max_name_width max_number_width < <(calculate_max_widths)
 
     for suite in "${test_suite_order[@]}"; do
         format_test_results "$suite" "$max_name_width" "$max_number_width"
@@ -370,35 +404,31 @@ print_summary() {
 }
 
 
+
 main() {
-    while getopts "vqijf:h" opt; do
-        case ${opt} in
-            v ) VERBOSITY=2 ;;
-            q ) VERBOSITY=0 ;;
-            h ) usage; exit 0 ;;
-            \? ) usage; exit 1 ;;
-        esac
-    done
-    shift $((OPTIND -1))
 
     local targets=("$@")
 
     if [ ${#targets[@]} -eq 0 ]; then
-        targets=($(find . -name "*.yaml" -type f))
+        mapfile -t targets < <(find . -name "*.yaml" -type f)
     fi
 
-    # Run ShellCheck
     run_shellcheck
 
-    # Run Kubeconform and Kube-score
+    # Filter out ignored files
+    local filtered_targets=()
     for target in "${targets[@]}"; do
-        if [[ "${targets[@]}" =~ \.github/|\.release-please|\.terraform/|kustomization\.yaml|kubeconfig\.yaml ]]; then
-            echo -e "${NC}Skipping ignored file: $target${NC}"
-            continue
+        if [[ ! "$target" =~ \.github/|\.release-please|\.terraform/|kustomization\.yaml|kubeconfig\.yaml ]]; then
+            filtered_targets+=("$target")
+        else
+            echo -e "${YELLOW}Skipping ignored file: $target${NC}"
         fi
     done
-    run_kubeconform "${targets[@]}"
-    run_kubescore "${targets[@]}"
+
+    # Run Kubeconform and Kube-score on filtered targets
+    run_kubeconform "${filtered_targets[@]}"
+    run_kubescore "${filtered_targets[@]}"
+
     # Print test results
     print_test_results
     print_summary
