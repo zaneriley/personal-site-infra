@@ -51,12 +51,63 @@ setup() {
     
     log "Development environment setup complete."
 }
-# Function to start development environment
+
 dev() {
     log "Starting development environment..."
     check_dependencies
-    kubectl apply -k .
-    log "Development environment started. You can now access your services."
+
+    # Check if necessary files exist
+    for file in kustomization.yaml kubernetes/base/namespace.yaml kubernetes/base/deployment.yaml kubernetes/base/ingress.yaml; do
+        if [ ! -f "$file" ]; then
+            error "File $file not found. Please make sure all required files are present."
+            exit 1
+        fi
+    done
+
+    # Apply kustomization
+    if kubectl apply -k .; then
+        log "Kustomization applied successfully."
+    else
+        error "Failed to apply kustomization. Check your Kubernetes manifests."
+        exit 1
+    fi
+
+    # Check pod status
+    log "Checking pod status..."
+    kubectl get pods -n personal-site
+
+    # Check events in the namespace
+    log "Checking events in the personal-site namespace..."
+    kubectl get events -n personal-site
+
+    # Check pod logs if they exist but are not ready
+    log "Checking pod logs..."
+    kubectl logs -n personal-site -l app=personal-site --tail=50
+
+    # Describe the deployment
+    log "Describing deployment..."
+    kubectl describe deployment -n personal-site
+
+    # Check services
+    log "Checking services..."
+    kubectl get services -n personal-site
+
+    # Wait for pods to be ready
+    log "Waiting for pods to be ready..."
+    if ! kubectl wait --for=condition=ready pod -l app=personal-site -n personal-site --timeout=120s; then
+        error "Pods did not become ready within the timeout period. Check your pod status."
+        kubectl describe pods -n personal-site
+        exit 1
+    fi
+
+    # Port forward to make the service accessible
+    log "Setting up port forwarding..."
+    if ! kubectl port-forward -n personal-site svc/personal-site-green 8000:80 &>/dev/null; then
+        error "Failed to set up port forwarding. Check if the service exists and is running."
+        exit 1
+    fi
+
+    log "Development environment started. You can now access your services at http://localhost:8000"
 }
 
 # Function to run tests

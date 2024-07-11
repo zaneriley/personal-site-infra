@@ -19,31 +19,31 @@ spec:
     spec:
       containers:
       - name: personal-site
-        image: nginx:alpine
+        image: ghcr.io/zaneriley/personal-site:latest
         imagePullPolicy: Always
         ports:
-        - containerPort: 80
-        command: ["/bin/sh", "-c"]
-        args: ["echo 'Blue Version' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'"]
+        - containerPort: 8000
         resources:
           requests:
             cpu: 100m
             memory: 128Mi
-            ephemeral-storage: 512Mi  # Add ephemeral storage limit
+            ephemeral-storage: 512Mi
           limits:
             cpu: 200m
             memory: 256Mi
-            ephemeral-storage: 512Mi  # Add ephemeral storage limit
+            ephemeral-storage: 512Mi
         readinessProbe:
           httpGet:
-            path: /
-            port: 80
+            path: /up
+            port: 8000
           initialDelaySeconds: 10
           periodSeconds: 5
-        livenessProbe:  # Add liveness probe
+        livenessProbe:
           httpGet:
-            path: /health-check
+            path: /up
             port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 10
         securityContext:
           runAsNonRoot: true
           runAsGroup: 10010
@@ -83,37 +83,35 @@ spec:
     spec:
       containers:
       - name: personal-site
-        image: nginx:alpine
+        image: ghcr.io/zaneriley/personal-site:latest
         imagePullPolicy: Always
         ports:
-        - containerPort: 80
-        command: ["/bin/sh", "-c"]
-        args: ["echo 'green Version' > /usr/share/nginx/html/index.html && nginx -g 'daemon off;'"]
+        - containerPort: 8000
         resources:
           requests:
             cpu: 100m
             memory: 128Mi
-            ephemeral-storage: 256Mi  # Add ephemeral storage request
+            ephemeral-storage: 512Mi
           limits:
             cpu: 200m
             memory: 256Mi
-            ephemeral-storage: 512Mi  # Add ephemeral storage limit
+            ephemeral-storage: 512Mi
         readinessProbe:
           httpGet:
-            path: /health  # Adjust to your app's health check endpoint
-            port: 80
+            path: /up
+            port: 8000
           initialDelaySeconds: 10
           periodSeconds: 5
-        livenessProbe:  # Add liveness probe
+        livenessProbe:
           httpGet:
-            path: /health
-            port: 80
+            path: /up
+            port: 8000
           initialDelaySeconds: 15
           periodSeconds: 10
         securityContext:
           runAsNonRoot: true
-          runAsUser: 10010  # Use a UID > 10000
-          runAsGroup: 10010  # Use a GID > 10000
+          runAsGroup: 10010
+          runAsUser: 10010
           readOnlyRootFilesystem: true
       affinity:
         podAntiAffinity:
@@ -140,7 +138,7 @@ spec:
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 80
+      targetPort: 8000
 ---
 apiVersion: v1
 kind: Service
@@ -154,7 +152,7 @@ spec:
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 80
+      targetPort: 8000
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget

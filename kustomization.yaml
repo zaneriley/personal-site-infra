@@ -4,5 +4,33 @@ resources:
   - kubernetes/base/namespace.yaml
   - kubernetes/base/deployment.yaml
   - kubernetes/base/ingress.yaml
-  - secret.yaml # TODO: SEAL SECRETS 
-  - kubernetes/base/service.yaml
+
+
+configMapGenerator:
+  - name: personal-site-config
+    namespace: personal-site
+    literals:
+      - PORT=8000
+      - MIX_ENV=prod
+      - NODE_ENV=production
+
+secretGenerator:
+  - name: personal-site-secrets
+    namespace: personal-site
+    literals:
+      - SECRET_KEY_BASE=replace_with_actual_secret
+      - PROD_TOKEN_SALT=replace_with_actual_salt
+      - POSTGRES_PASSWORD=replace_with_actual_password
+
+patches:
+  - target:
+      kind: Deployment
+      name: .*personal-site.*
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom
+        value:
+          - configMapRef:
+              name: personal-site-config
+          - secretRef:
+              name: personal-site-secrets
