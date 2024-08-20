@@ -64,7 +64,7 @@ graph TD
 
 1. Clone the repository:
   ```bash
-  git clone https://github.com/zaneriley/personal-site.git
+  git clone https://github.com/zaneriley/personal-site-infra.git
   ```
   
 1. Adjust the `scripts/install-setup.sh` file with your correct image registry and version.
@@ -129,8 +129,8 @@ flux get images all
    ```bash
    echo "127.0.0.1 personal-site.local" | sudo tee -a /etc/hosts
    ```
-   - Type `   kubectl port-forward -n ingress-nginx service/ingress-nginx-controller 8080:80`. This command forwards port 80 of the ingress controller to port 8080 on your local machine.
-   - Open a browser and navigate to `http://personal-site.local:8080`
+   - Type `   kubectl port-forward -n ingress-nginx service/ingress-nginx-controller 8000:80`. This command forwards port 80 of the ingress controller to port 8000 on your local machine.
+   - Open a browser and navigate to `http://personal-site.local:8000`
    - Verify you see the "Green Version" message
 
 1. Test blue/green switch:

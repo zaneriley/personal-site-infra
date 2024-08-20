@@ -51,12 +51,74 @@ setup() {
     
     log "Development environment setup complete."
 }
-# Function to start development environment
+
 dev() {
     log "Starting development environment..."
     check_dependencies
-    kubectl apply -k .
-    log "Development environment started. You can now access your services."
+
+    # Check if kubeconfig file exists and is readable
+    if [ ! -r "/etc/rancher/k3s/k3s.yaml" ]; then
+        error "Cannot read K3s kubeconfig file. Please ensure K3s is installed and you have the necessary permissions."
+        log "Try running: sudo chmod 644 /etc/rancher/k3s/k3s.yaml"
+        log "Or: export KUBECONFIG=\$HOME/.kube/config"
+        exit 1
+    fi
+
+    # Set KUBECONFIG environment variable
+    export KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
+
+    # Check if necessary files exist
+    for file in kustomization.yaml kubernetes/base/namespace.yaml kubernetes/base/deployment.yaml kubernetes/base/ingress.yaml; do
+        if [ ! -f "$file" ]; then
+            error "File $file not found. Please make sure all required files are present."
+            exit 1
+        fi
+    done
+
+    # Apply kustomization
+    if kubectl apply -k .; then
+        log "Kustomization applied successfully."
+    else
+        error "Failed to apply kustomization. Check your Kubernetes manifests."
+        exit 1
+    fi
+
+    # Check pod status
+    log "Checking pod status..."
+    kubectl get pods -n personal-site
+
+    # Check events in the namespace
+    log "Checking events in the personal-site namespace..."
+    kubectl get events -n personal-site
+
+    # Check pod logs if they exist but are not ready
+    log "Checking pod logs..."
+    kubectl logs -n personal-site -l app=personal-site --tail=50
+
+    # Describe the deployment
+    log "Describing deployment..."
+    kubectl describe deployment -n personal-site
+
+    # Check services
+    log "Checking services..."
+    kubectl get services -n personal-site
+
+    # Wait for pods to be ready
+    log "Waiting for pods to be ready..."
+    if ! kubectl wait --for=condition=ready pod -l app=personal-site -n personal-site --timeout=120s; then
+        error "Pods did not become ready within the timeout period. Check your pod status."
+        kubectl describe pods -n personal-site
+        exit 1
+    fi
+
+    # Port forward to make the service accessible
+    log "Setting up port forwarding..."
+    if ! kubectl port-forward -n personal-site svc/personal-site-green 8000:80 &>/dev/null; then
+        error "Failed to set up port forwarding. Check if the service exists and is running."
+        exit 1
+    fi
+
+    log "Development environment started. You can now access your services at http://localhost:8000"
 }
 
 # Function to run tests
@@ -117,12 +179,23 @@ cleanup() {
     log "Cleanup completed."
 }
 
+stop() {
+    log "Stopping k3s..."
+    if ./scripts/stop-k3s.sh; then
+        log "k3s stopped successfully."
+    else
+        error "Failed to stop k3s. Check the logs for more information."
+        exit 1
+    fi
+}
+
 # Help function
 show_help() {
     echo "Usage: ./run [command]"
     echo "Commands:"
     echo "  setup         - Set up the development environment"
     echo "  dev           - Start the development environment"
+    echo "  stop          - Stop the k3s service"
     echo "  test          - Run all tests"
     echo "  deploy [env]  - Deploy to specified environment (local, staging, production)"
     echo "  canary [%]    - Implement canary deployment with specified percentage"
@@ -131,6 +204,7 @@ show_help() {
     echo "  cleanup       - Remove all created resources"
     echo "  help          - Show this help message"
 }
+
 
 # Main script execution
 case "${1:-help}" in
@@ -143,6 +217,9 @@ case "${1:-help}" in
         ;;
     dev)
         dev
+        ;;
+    stop)
+        stop
         ;;
     test)
         test
