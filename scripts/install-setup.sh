@@ -6,20 +6,10 @@ GITHUB_USER=""
 
 # Configuration variables
 KUBECONFORM_VERSION="0.6.6"
-KUBESCORE_VERSION="v1.18.0"
+KUBESCORE_VERSION="1.18.0"
 
 LOG_FILE="${K3S_INSTALL_LOG_FILE:-/tmp/k3s_install.log}"
 
-# Check if GITHUB_USER is provided
-if [ "$#" -eq 0 ]; then
-    echo "Error: GITHUB_USER is required"
-    echo "Usage: $0 <GITHUB_USER> [OPTIONS]"
-    exit 1
-fi
-
-# Set GITHUB_USER from the first argument
-GITHUB_USER="$1"
-shift  # Remove the first argument (GITHUB_USER) from the argument list
 
 check_kubeconfig() {
     if [ ! -f "$(pwd)/kubeconfig.yaml" ]; then
@@ -98,6 +88,8 @@ install_k3s() {
 
     log "Setting correct permissions for k3s config"
     sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+
+    sudo chown "$USER":"$USER" /etc/rancher/k3s/k3s.yaml
 
     log "Waiting for k3s to be ready"
     timeout=600  # 10 minutes
@@ -191,9 +183,8 @@ install_kubescore() {
 
 # Usage function
 usage() {
-    echo "Usage: $0 [OPTIONS] <GITHUB_USER>"
+    echo "Usage: $0 <GITHUB_USER> [OPTIONS]"
     echo "Options:"
-    echo "  --skip-shellcheck  Skip ShellCheck installation"
     echo "  --skip-k3s         Skip K3s installation"
     echo "  --skip-flux        Skip FluxCD installation"
     echo "  --skip-helm        Skip Helm installation"
@@ -206,7 +197,6 @@ usage() {
 
 # Main script execution
 main() {
-    local skip_shellcheck=false
     local skip_k3s=false
     local skip_flux=false
     local skip_helm=false
@@ -218,7 +208,6 @@ main() {
     # Parse command-line options
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --skip-shellcheck) skip_shellcheck=true ;;
             --skip-k3s) skip_k3s=true ;;
             --skip-flux) skip_flux=true ;;
             --skip-helm) skip_helm=true ;;
@@ -247,7 +236,6 @@ main() {
     fi
 
     # Run installation steps
-    $skip_shellcheck || install_shellcheck || handle_error $LINENO
     $skip_k3s || install_k3s || handle_error $LINENO
     $skip_flux || install_flux || handle_error $LINENO
     $skip_helm || install_helm || handle_error $LINENO
@@ -262,5 +250,5 @@ main() {
 # Script entry point
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     trap cleanup EXIT
-    main "${@:2}" 
+    main "$@"
 fi
