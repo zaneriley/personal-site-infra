@@ -56,6 +56,17 @@ dev() {
     log "Starting development environment..."
     check_dependencies
 
+    # Check if kubeconfig file exists and is readable
+    if [ ! -r "/etc/rancher/k3s/k3s.yaml" ]; then
+        error "Cannot read K3s kubeconfig file. Please ensure K3s is installed and you have the necessary permissions."
+        log "Try running: sudo chmod 644 /etc/rancher/k3s/k3s.yaml"
+        log "Or: export KUBECONFIG=\$HOME/.kube/config"
+        exit 1
+    fi
+
+    # Set KUBECONFIG environment variable
+    export KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
+
     # Check if necessary files exist
     for file in kustomization.yaml kubernetes/base/namespace.yaml kubernetes/base/deployment.yaml kubernetes/base/ingress.yaml; do
         if [ ! -f "$file" ]; then
@@ -168,12 +179,23 @@ cleanup() {
     log "Cleanup completed."
 }
 
+stop() {
+    log "Stopping k3s..."
+    if ./scripts/stop-k3s.sh; then
+        log "k3s stopped successfully."
+    else
+        error "Failed to stop k3s. Check the logs for more information."
+        exit 1
+    fi
+}
+
 # Help function
 show_help() {
     echo "Usage: ./run [command]"
     echo "Commands:"
     echo "  setup         - Set up the development environment"
     echo "  dev           - Start the development environment"
+    echo "  stop          - Stop the k3s service"
     echo "  test          - Run all tests"
     echo "  deploy [env]  - Deploy to specified environment (local, staging, production)"
     echo "  canary [%]    - Implement canary deployment with specified percentage"
@@ -182,6 +204,7 @@ show_help() {
     echo "  cleanup       - Remove all created resources"
     echo "  help          - Show this help message"
 }
+
 
 # Main script execution
 case "${1:-help}" in
@@ -194,6 +217,9 @@ case "${1:-help}" in
         ;;
     dev)
         dev
+        ;;
+    stop)
+        stop
         ;;
     test)
         test
