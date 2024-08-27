@@ -1,0 +1,23 @@
+apiVersion: image.toolkit.fluxcd.io/v1beta1
+kind: ImageUpdateAutomation
+metadata:
+  name: personal-site-blue
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  sourceRef:
+    kind: GitRepository
+    name: personal-site-infra
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        email: fluxcdbot@users.noreply.github.com
+        name: fluxcdbot
+      messageTemplate: 'Update blue deployment to {{range .Updated.Images}}{{println .}}{{end}}'
+  update:
+    path: ./kubernetes/overlays/blue
+    strategy: Setters
+  suspend: ${SUSPEND_BLUE}

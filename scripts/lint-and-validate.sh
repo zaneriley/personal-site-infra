@@ -9,10 +9,15 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+PASS_SYMBOL='✓'
+FAIL_SYMBOL='✗'
+WARN_SYMBOL='!'
+
 VERBOSITY=2 # 0: quiet, 1: normal, 2: verbose
 SHELLCHECK_OUTPUT=""
 KUBECONFORM_OUTPUT=""
 KUBESCORE_OUTPUT=""
+
 
 # Array to store test suite data
 declare -A TEST_RESULTS
@@ -20,8 +25,7 @@ declare -A TEST_RESULTS
 # Array to define order of test suites
 test_suite_order=("ShellCheck" "Kubeconform" "Kube-score")
 
-
-# Utility functions
+# Modify the existing log function or create a new one to handle different verbosity levels
 log() {
     local level=$1
     shift
@@ -29,6 +33,8 @@ log() {
         echo -e "$@"
     fi
 }
+
+
 print_header() {
     log 1 "\n${BLUE}======== $1 ========${NC}"
 }
@@ -36,6 +42,7 @@ print_header() {
 print_section_break() {
     log 1 "\n${BLUE}----------------------------------------${NC}"
 }
+
 print_suite_summary() {
     local suite=$1
     local total=$2
@@ -75,6 +82,21 @@ show_progress() {
     local total=$2
     local test_suite=$3
     log 1 -ne "\r${BLUE}[$test_suite] Progress: $current/$total${NC}"
+}
+
+function format_status() {
+    local status=$1
+    case "$status" in
+        pass)
+            echo -e "${GREEN}${PASS_SYMBOL} Passed${NC}"
+            ;;
+        fail)
+            echo -e "${RED}${FAIL_SYMBOL} Failed${NC}"
+            ;;
+        warn)
+            echo -e "${YELLOW}${WARN_SYMBOL} Warning${NC}"
+            ;;
+    esac
 }
 
 format_error() {
@@ -186,7 +208,7 @@ debug_print() {
     fi
 }
 
-run_shellcheck() {
+function run_shellcheck() {
     local shell_scripts
     shell_scripts=$(find ./scripts -name "*.sh")
     local total_scripts
@@ -195,51 +217,46 @@ run_shellcheck() {
 
     SHELLCHECK_TOTAL=$total_scripts
     SHELLCHECK_PASSED=0
-    SHELLCHECK_FIXED=0
     SHELLCHECK_FAILED=0
     SHELLCHECK_WARNINGS=0
-    SHELLCHECK_INFO=0
 
-    SHELLCHECK_OUTPUT+="Checking $total_scripts script(s)\n"
+   # Use an array to store output lines
+    local output_lines=()
+    local detailed_outputs=() 
+
+    output_lines+=("Script                                   | Status   | Warnings  | Errors  | Notes")
+    output_lines+=("--------------------------------------------------------------------------------")
 
     for script in $shell_scripts; do
         ((current_script++))
-        show_progress "$current_script" "$total_scripts" "ShellCheck"
-
         local shellcheck_output
         shellcheck_output=$(shellcheck -f gcc "$script" 2>&1)
         local shellcheck_exit_code=$?
-
         local warning_count
-        local info_count
+        local error_count
+        local note_count
         warning_count=$(echo "$shellcheck_output" | grep -c ": warning:")
-        info_count=$(echo "$shellcheck_output" | grep -c ": note:")
+        error_count=$(echo "$shellcheck_output" | grep -c ": error:")
+        note_count=$(echo "$shellcheck_output" | grep -c ": note:")
 
-        if [ $shellcheck_exit_code -eq 0 ] && [ "$warning_count" -eq 0 ] && [ "$info_count" -eq 0 ]; then
-            ((SHELLCHECK_PASSED++))
-            SHELLCHECK_OUTPUT+="✓ $script passed ShellCheck\n"
+        detailed_outputs+=("$script:\n$shellcheck_output\n")  # Store detailed output
+
+        local status
+        if [ $shellcheck_exit_code -ne 0 ]; then
+            status=$(format_status fail)
+            ((SHELLCHECK_FAILED++))
         else
-            # Generate diff and apply fixes
-            local diff_output
-            diff_output=$(shellcheck -f diff "$script")
-            if [ -n "$diff_output" ]; then
-                echo "$diff_output" | patch -p1 "$script"
-                ((SHELLCHECK_FIXED++))
-                SHELLCHECK_OUTPUT+="✓ $script fixed by ShellCheck\n"
-            else
-                ((SHELLCHECK_FAILED++))
-                SHELLCHECK_OUTPUT+="✗ $script failed ShellCheck and couldn't be automatically fixed\n"
-                SHELLCHECK_OUTPUT+="$shellcheck_output\n"
-            fi
+            status=$(format_status pass)
+            ((SHELLCHECK_PASSED++))
         fi
+        output_lines+=("$(printf "%-40s | %s | %-9d | %-7d | %-5d" "$script" "$status" "$warning_count" "$error_count" "$note_count")")
 
-        ((SHELLCHECK_WARNINGS += warning_count))
-        ((SHELLCHECK_INFO += info_count))
     done
-    
-    echo # New line after progress bar
-}
+    output_lines+=("")
 
+    # Join array elements with newlines
+    SHELLCHECK_OUTPUT=$(printf '%s\n' "${output_lines[@]}")
+}
 
 run_kubeconform() {
     local files=("$@")
@@ -319,6 +336,14 @@ run_kubeconform() {
     fi
 }
 
+colorize_kubescore_output() {
+    local line="$1"
+    if [[ $line == *"[CRITICAL]"* ]]; then
+        echo -e "${RED}${line}${NC}"
+    else
+        echo "$line"
+    fi
+}
 # Modify run_kubescore function
 run_kubescore() {
     local files=("$@")
@@ -357,18 +382,20 @@ run_kubescore() {
             ((KUBESCORE_FAILED++))
             KUBESCORE_OUTPUT+="✗ $file failed Kube-score\n"
         fi
-
         if [ "$VERBOSITY" -ge 2 ]; then
-            KUBESCORE_OUTPUT+="$output\n"
+            while IFS= read -r line; do
+                KUBESCORE_OUTPUT+="$(colorize_kubescore_output "$line")\n"
+            done <<< "$output"
         elif [ "$VERBOSITY" -ge 1 ]; then
-            KUBESCORE_OUTPUT+="$(echo "$output" | grep -E "\[CRITICAL\]|\[WARN\]")\n"
+            while IFS= read -r line; do
+                if [[ "$line" =~ \[CRITICAL\]|\[WARN\] ]]; then
+                    KUBESCORE_OUTPUT+="$(colorize_kubescore_output "$line")\n"
+                fi
+            done <<< "$output"
         fi
 
         ((KUBESCORE_WARNINGS += warning_count))
     done
-
-    echo # New line after progress bar
-    KUBESCORE_OUTPUT+="\n[Kube-score] Summary: $KUBESCORE_TOTAL total, $KUBESCORE_PASSED passed, $KUBESCORE_FAILED failed, $KUBESCORE_WARNINGS warnings\n"
 }
 
 # Function to print test results
