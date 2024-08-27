@@ -1,0 +1,13 @@
+apiVersion: image.toolkit.fluxcd.io/v1beta1
+kind: ImagePolicy
+metadata:
+  name: personal-site-green
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: personal-site
+  filterTags:
+    pattern: '^v\d+\.\d+\.\d+(-green.*)$'
+  policy:
+    semver:
+      range: '>=0.3.0 <1.0.0'

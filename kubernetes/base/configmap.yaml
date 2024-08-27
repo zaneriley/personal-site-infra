@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: personal-site-config
+  namespace: personal-site
+data:
+  URL_SCHEME: "http"
+  URL_HOST: "0.0.0.0"
+  URL_PORT: "8000"
+  MIX_ENV: "prod"
+  NODE_ENV: "production"
+  CSP_REPORT_ONLY: "false"
+  CSP_ADDITIONAL_HOSTS: "localhost,dev.local,192.168.11.20"
+  CSP_INTERNAL_NETWORK: "192.168.11.20"
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432" # Prevents a conflict with the default k8s vars
