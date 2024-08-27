@@ -28,6 +28,8 @@ metadata:
     kube-score/ignore: ingress-targets-service # This is working successfully, but kube-score is not detecting it
     nginx.ingress.kubernetes.io/canary: "true"
     nginx.ingress.kubernetes.io/canary-weight: "0"
+    nginx.ingress.kubernetes.io/canary-by-header: "X-Canary"
+    nginx.ingress.kubernetes.io/canary-by-header-value: "true"
 spec:
   ingressClassName: nginx
   rules:

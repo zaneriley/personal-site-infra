@@ -3,8 +3,6 @@ kind: Deployment
 metadata:
   name: personal-site-blue
   namespace: personal-site
-  annotations:
-    kube-score/ignore: pod-probes
 spec:
   replicas: 2
   selector:
@@ -19,56 +17,26 @@ spec:
     spec:
       containers:
       - name: personal-site
-        image: ghcr.io/zaneriley/personal-site:latest
-        imagePullPolicy: Always
+        image: ghcr.io/zaneriley/personal-site:v0.3.2-alpha.1
         ports:
         - containerPort: 8000
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-            ephemeral-storage: 512Mi
-          limits:
-            cpu: 200m
-            memory: 256Mi
-            ephemeral-storage: 512Mi
-        readinessProbe:
-          httpGet:
-            path: /up
-            port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        livenessProbe:
-          httpGet:
-            path: /up
-            port: 8000
-          initialDelaySeconds: 15
-          periodSeconds: 10
-        securityContext:
-          runAsNonRoot: true
-          runAsGroup: 10010
-          runAsUser: 10010
-          readOnlyRootFilesystem: true
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: app
-                  operator: In
-                  values:
-                  - personal-site
-              topologyKey: "kubernetes.io/hostname"
+        envFrom:
+        - configMapRef:
+            name: personal-site-config
+        - secretRef:
+            name: personal-site-secrets
+        env:
+        - name: POSTGRES_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: personal-site-config
+              key: POSTGRES_PORT
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: personal-site-green
   namespace: personal-site
-  annotations:
-    kube-score/ignore: pod-probes
 spec:
   replicas: 2
   selector:
@@ -83,117 +51,11 @@ spec:
     spec:
       containers:
       - name: personal-site
-        image: ghcr.io/zaneriley/personal-site:latest
-        imagePullPolicy: Always
+        image: ghcr.io/zaneriley/personal-site:v0.3.2-alpha.1
         ports:
         - containerPort: 8000
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-            ephemeral-storage: 512Mi
-          limits:
-            cpu: 200m
-            memory: 256Mi
-            ephemeral-storage: 512Mi
-        readinessProbe:
-          httpGet:
-            path: /up
-            port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        livenessProbe:
-          httpGet:
-            path: /up
-            port: 8000
-          initialDelaySeconds: 15
-          periodSeconds: 10
-        securityContext:
-          runAsNonRoot: true
-          runAsGroup: 10010
-          runAsUser: 10010
-          readOnlyRootFilesystem: true
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: app
-                  operator: In
-                  values:
-                  - personal-site
-              topologyKey: "kubernetes.io/hostname"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: personal-site-blue
-  namespace: personal-site
-spec:
-  selector:
-    app: personal-site
-    version: blue 
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 8000
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: personal-site-green
-  namespace: personal-site
-spec:
-  selector:
-    app: personal-site
-    version: green
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 8000
----
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: personal-site-pdb
-  namespace: personal-site
-spec:
-  maxUnavailable: 1
-  selector:
-    matchLabels:
-      app: personal-site
----
-# Add NetworkPolicy
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: personal-site-network-policy
-  namespace: personal-site
-spec:
-  podSelector:
-    matchLabels:
-      app: personal-site
-  policyTypes:
-  - Ingress
-  - Egress
-  ingress:
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          name: ingress-nginx  # Adjust based on your ingress namespace
-    ports:
-    - protocol: TCP
-      port: 80
-  egress:
-  - to:
-    - ipBlock:
-        cidr: 0.0.0.0/0
-        except:
-        - 10.0.0.0/8
-        - 172.16.0.0/12
-        - 192.168.0.0/16
-    ports:
-    - protocol: TCP
-      port: 443  # Allow HTTPS egress
+        envFrom:
+        - configMapRef:
+            name: personal-site-config
+        - secretRef:
+            name: personal-site-secrets
