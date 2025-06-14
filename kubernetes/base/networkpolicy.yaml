@@ -1,0 +1,69 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-netpol
+  namespace: personal-site
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: personal-site # Allows traffic from blue and green personal-site pods
+    ports:
+    - protocol: TCP
+      port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: personal-site-blue-netpol
+  namespace: personal-site
+spec:
+  podSelector:
+    matchLabels:
+      app: personal-site
+      version: blue
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    # This allows traffic from any pod in the namespace 'personal-site'.
+    # This is a common approach for ingress controllers that are in the same namespace.
+    # If the ingress controller is in a different namespace, this would need adjustment
+    # or a namespaceSelector.
+    - podSelector: {} # Selects all pods in the namespace personal-site
+    ports:
+    # The port here must be the actual port number the container is listening on.
+    # NetworkPolicy does not support valueFrom ConfigMap for ports.
+    # We use the default 8000, which is APP_CONTAINER_PORT in the configmap.
+    # If APP_CONTAINER_PORT is changed, this policy would also need to be updated.
+    - protocol: TCP
+      port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: personal-site-green-netpol
+  namespace: personal-site
+spec:
+  podSelector:
+    matchLabels:
+      app: personal-site
+      version: green
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {} # Selects all pods in the namespace personal-site
+    ports:
+    # The port here must be the actual port number the container is listening on.
+    # NetworkPolicy does not support valueFrom ConfigMap for ports.
+    # We use the default 8000, which is APP_CONTAINER_PORT in the configmap.
+    # If APP_CONTAINER_PORT is changed, this policy would also need to be updated.
+    - protocol: TCP
+      port: 8000

@@ -1,0 +1,23 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: personal-site-blue-pdb
+  namespace: personal-site
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: personal-site
+      version: blue
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: personal-site-green-pdb
+  namespace: personal-site
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: personal-site
+      version: green

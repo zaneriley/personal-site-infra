@@ -10,7 +10,11 @@ spec:
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 8000
+      targetPort:
+        valueFrom:
+          configMapKeyRef:
+            name: personal-site-config
+            key: APP_CONTAINER_PORT
 ---
 apiVersion: v1
 kind: Service
@@ -24,4 +28,8 @@ spec:
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 8000
+      targetPort:
+        valueFrom:
+          configMapKeyRef:
+            name: personal-site-config
+            key: APP_CONTAINER_PORT

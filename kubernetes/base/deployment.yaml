@@ -50,6 +50,22 @@ spec:
           capabilities:
             drop:
               - ALL
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - personal-site
+                - key: version
+                  operator: In
+                  values:
+                  - blue
+              topologyKey: kubernetes.io/hostname
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -97,3 +113,19 @@ spec:
           capabilities:
             drop:
               - ALL
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - personal-site
+                - key: version
+                  operator: In
+                  values:
+                  - green
+              topologyKey: kubernetes.io/hostname
