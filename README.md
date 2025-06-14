@@ -185,6 +185,85 @@ flux get images all
   kubectl delete namespace personal-site
   ```
 
+## Observability (Prometheus & Grafana)
+
+This project now includes a GitOps-managed observability stack using Prometheus for metrics collection and Grafana for visualization. The setup is deployed via the `kube-prometheus-stack` Helm chart, managed by FluxCD.
+
+### How it Works
+
+FluxCD monitors the `kubernetes/` directory (specifically looking at `kubernetes/kustomization.yaml`, which then includes `kubernetes/observability/kustomization.yaml`). When changes are pushed to this repository, FluxCD will:
+
+1.  Apply the `HelmRepository` resource to make the `prometheus-community` Helm chart repository available.
+2.  Apply the `HelmRelease` resource for `kube-prometheus-stack`, which installs Prometheus, Grafana, Alertmanager, and various metrics exporters into the `monitoring` namespace.
+3.  Apply the `sealed-grafana-admin-credentials.yaml` (once created by you) to configure the Grafana admin password.
+4.  Grafana is configured with a sidecar to automatically discover and import dashboards provided as ConfigMaps with the label `grafana_dashboard: "1"` in the `monitoring` namespace. (Note: The actual creation of these dashboard ConfigMaps is a pending task from the previous automated work session).
+
+### User Setup Steps
+
+There are a couple of manual steps you need to perform for the initial setup:
+
+1.  **Set Grafana Admin Password:**
+    A manifest for an unsealed Grafana admin secret is provided at `kubernetes/observability/grafana-admin-credentials-unsealed.yaml`. You **must** edit this file to set a strong password:
+    ```yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: grafana-admin-credentials
+      namespace: monitoring
+    type: Opaque
+    stringData:
+      adminPassword: "YOUR_STRONG_GRAFANA_PASSWORD" # <-- REPLACE THIS
+      adminUser: admin
+    ```
+    Then, use your `kubeseal` utility to encrypt this secret and save it as `kubernetes/observability/sealed-grafana-admin-credentials.yaml`.
+    Example command:
+    ```bash
+    kubeseal --format=yaml < kubernetes/observability/grafana-admin-credentials-unsealed.yaml > kubernetes/observability/sealed-grafana-admin-credentials.yaml
+    ```
+    Commit the resulting `sealed-grafana-admin-credentials.yaml` file to the repository. The unsealed version should **not** be committed.
+
+2.  **Verify FluxCD Kustomization:**
+    This setup introduced a top-level Kustomization at `kubernetes/kustomization.yaml` which includes the `./base` and `./observability` paths.
+    Ensure your FluxCD bootstrap configuration (the `Kustomization` resource that syncs *this* `personal-site-infra` repository) is pointing to this `kubernetes/kustomization.yaml` file, or that it otherwise includes `kubernetes/observability/kustomization.yaml` in its `spec.path`. If Flux was originally bootstrapped to only look at `./kubernetes/base` or specific overlay paths, you might need to update its configuration to include the new observability components.
+
+### Accessing Grafana
+
+Once deployed, you can access Grafana as follows:
+
+*   **Username:** `admin`
+*   **Password:** The strong password you set in the `grafana-admin-credentials` secret.
+
+To access the Grafana UI, you can use port-forwarding:
+
+```bash
+kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 9090:80
+```
+
+Then, open your browser and navigate to `http://localhost:9090`.
+
+*(Note: The service name for Grafana is typically `<helm-release-name>-grafana`. Since our HelmRelease is named `kube-prometheus-stack`, the service is `kube-prometheus-stack-grafana`.)*
+
+### Available Dashboards (Pending Implementation)
+
+The following dashboards are intended to be automatically imported into Grafana once their ConfigMap definitions are added (this was a pending task from the previous automated work session and still needs to be implemented):
+
+*   **Kubernetes Cluster Overview:** General health and resource usage of the Kubernetes cluster.
+*   **Kubernetes Node Overview:** Detailed metrics for individual nodes.
+*   **FluxCD Control Plane:** Health and status of FluxCD components and reconciliations.
+
+### Troubleshooting
+
+*   **Check Pod Status:** To see if Prometheus, Grafana, and other components are running:
+    ```bash
+    kubectl get pods -n monitoring
+    ```
+*   **Check FluxCD Logs:** If the observability components are not deploying as expected, check the FluxCD controller logs:
+    ```bash
+    kubectl logs -n flux-system -l app=source-controller
+    kubectl logs -n flux-system -l app=kustomize-controller
+    kubectl logs -n flux-system -l app=helm-controller
+    ```
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

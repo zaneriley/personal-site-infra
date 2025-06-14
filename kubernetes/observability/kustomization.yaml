@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: flux-system # Kustomizations themselves are often managed in flux-system
+
+resources:
+  - helmrepository-prometheus-community.yaml
+  - helmrelease-kube-prometheus-stack.yaml
+  # The user will create this sealed secret.
+  # Flux will apply it once it's present in the directory.
+  - sealed-grafana-admin-credentials.yaml

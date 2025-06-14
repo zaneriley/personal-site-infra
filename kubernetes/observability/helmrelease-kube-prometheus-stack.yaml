@@ -1,0 +1,46 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: kube-prometheus-stack
+  namespace: flux-system # This should be flux-system to be managed by Flux
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+        namespace: flux-system
+      version: "56.6.0" # Use a specific version for predictability
+  releaseName: kube-prometheus-stack
+  targetNamespace: monitoring # Deploy the actual stack into the 'monitoring' namespace
+  install:
+    createNamespace: true # Create the 'monitoring' namespace if it doesn't exist
+  values:
+    grafana:
+      adminPasswordFromSecret:
+        name: grafana-admin-credentials
+        key: adminPassword
+      persistence:
+        enabled: true
+        size: 10Gi
+      # Necessary for dashboard ConfigMap discovery
+      sidecar:
+        dashboards:
+          enabled: true
+          searchNamespace: "ALL" # Or specify "monitoring" if dashboards are only there
+    prometheus:
+      prometheusSpec:
+        persistence:
+          enabled: true
+          volumeSize: 10Gi
+        retention: 10d # Adjust retention as needed
+        # Rule and ServiceMonitor discovery from all namespaces
+        ruleSelectorNilUsesHelmValues: false
+        serviceMonitorSelectorNilUsesHelmValues: false
+
+# Note: We will create a separate secret for grafana.adminPassword
+# and then update this HelmRelease to reference it.
+# For now, a placeholder value is used to create the file structure.
+# Actual Grafana password will be managed via a SealedSecret.
