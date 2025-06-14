@@ -136,7 +136,7 @@ install_flux() {
     log "Bootstrapping FluxCD"
     if ! KUBECONFIG=$(pwd)/kubeconfig.yaml flux bootstrap github \
         --owner="$GITHUB_USER" \
-        --repository=personal-site \
+        --repository=personal-site-infra \
         --branch=main \
         --path=./kubernetes/clusters/local \
         --personal; then

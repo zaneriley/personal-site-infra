@@ -18,7 +18,6 @@ SHELLCHECK_OUTPUT=""
 KUBECONFORM_OUTPUT=""
 KUBESCORE_OUTPUT=""
 
-
 # Array to store test suite data
 declare -A TEST_RESULTS
 
@@ -34,49 +33,6 @@ log() {
     fi
 }
 
-
-print_header() {
-    log 1 "\n${BLUE}======== $1 ========${NC}"
-}
-
-print_section_break() {
-    log 1 "\n${BLUE}----------------------------------------${NC}"
-}
-
-print_suite_summary() {
-    local suite=$1
-    local total=$2
-    local passed=$3
-    local failed=$4
-    local warnings=${5:-0}
-    
-    local status_symbol="✓"
-    local status_color=$GREEN
-    
-    if (( failed > 0 )); then
-        status_symbol="✗"
-        status_color=$RED
-    elif (( warnings > 0 )); then
-        status_symbol="!"
-        status_color=$YELLOW
-    fi
-    
-    log 1 "\n${status_color}${status_symbol}${NC} ${BLUE}${suite} Summary:${NC}"
-    log 1 "  Total: $total, Passed: $passed, Failed: $failed, Warnings: $warnings"
-}
-
-time_command() {
-    local start_time
-    local end_time
-    local duration
-
-    start_time=$(date +%s.%N)
-    "$@"
-    end_time=$(date +%s.%N)
-    duration=$(echo "$end_time - $start_time" | bc)
-    log 2 "${YELLOW}Execution time: ${duration} seconds${NC}"
-}
-
 show_progress() {
     local current=$1
     local total=$2
@@ -84,7 +40,7 @@ show_progress() {
     log 1 -ne "\r${BLUE}[$test_suite] Progress: $current/$total${NC}"
 }
 
-function format_status() {
+format_status() {
     local status=$1
     case "$status" in
         pass)
@@ -99,24 +55,6 @@ function format_status() {
     esac
 }
 
-format_error() {
-    local severity=$1
-    local message=$2
-    case $severity in
-        "warning") log 1 "${YELLOW}WARNING: $message${NC}" ;;
-        "error") log 1 "${RED}ERROR: $message${NC}" ;;
-        *) log 1 "$message" ;;
-    esac
-}
-
-prompt_for_fix() {
-    local script=$1
-    read -p "Do you want to fix issues in ""$script"" now? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        $EDITOR "$script"
-    fi
-}
 # Function to add test suite results
 add_test_suite_results() {
     local name=$1
@@ -131,41 +69,27 @@ calculate_max_widths() {
     local max_name_width=0
     local max_number_width=0
 
-    for suite in "${!TEST_RESULTS[@]}"; do
-        local name_length=${#suite}
+    for suite_key in "${!TEST_RESULTS[@]}"; do
+        # Extract the suite name from the key (e.g., "ShellCheck,total" -> "ShellCheck")
+        local suite_name="${suite_key%%,*}"
+        local name_length=${#suite_name}
         if (( name_length > max_name_width )); then
             max_name_width=$name_length
         fi
 
         for metric in total passed failed warnings; do
-            local number_length=${#TEST_RESULTS[$suite,$metric]}
-            if (( number_length > max_number_width )); then
-                max_number_width=$number_length
+            local metric_key="$suite_name,$metric"
+            # Check if the key exists before trying to access its length
+            if [[ -n "${TEST_RESULTS[$metric_key]}" ]]; then
+                local number_length=${#TEST_RESULTS[$metric_key]}
+                if (( number_length > max_number_width )); then
+                    max_number_width=$number_length
+                fi
             fi
         done
     done
 
     echo "$max_name_width $max_number_width"
-}
-
-# Function to format a line with color
-format_color_line() {
-    local color=$1
-    local text=$2
-    echo -e "${color}${text}${NC}"
-}
-
-# Function to apply color to a metric
-apply_color() {
-    local value=$1
-    local color=$2
-    local label=$3
-    local width=$4
-    if (( value == 0 )); then
-        printf "%*d %s" "$width" "$value" "$label"
-    else
-        printf "${color}%*d %s${NC}" "$width" "$value" "$label"
-    fi
 }
 
 # Function to format test results
@@ -202,13 +126,7 @@ format_test_results() {
         "$status_symbol" "$max_name_width" "$suite" "$max_number_width" "$total" "$passed" "$failed" "$warnings"
 }
 
-debug_print() {
-    if [[ $VERBOSITY -ge 2 ]]; then
-        echo "DEBUG: $*" >&2
-    fi
-}
-
-function run_shellcheck() {
+run_shellcheck() {
     local shell_scripts
     shell_scripts=$(find ./scripts -name "*.sh")
     local total_scripts
@@ -260,16 +178,17 @@ function run_shellcheck() {
 
 run_kubeconform() {
     local files=("$@")
-    
-    if [ ${#files[@]} -eq 0 ]; then
-        files=(".")
+    local files_to_scan=("${files[@]}") # Create a mutable copy
+
+    if [ ${#files_to_scan[@]} -eq 0 ]; then
+        files_to_scan=(".")
     fi
 
     KUBECONFORM_OUTPUT="Running Kubeconform...\n"
 
     # Run Kubeconform on all files at once
     local output
-    output=$(kubeconform -summary -verbose -output text "${files[@]}" 2>&1)
+    output=$(kubeconform -summary -verbose -output text -skip ImagePolicy,ImageUpdateAutomation,ImageRepository "${files_to_scan[@]}" 2>&1)
 
     # Process and align the output
     local aligned_output=""
@@ -277,14 +196,13 @@ run_kubeconform() {
     local max_resource_length=0
 
     # First pass to determine maximum lengths
+    # Ensure lines are processed correctly even if they contain spaces
     while IFS= read -r line; do
-        if [[ $line =~ ^./.*valid$ ]]; then
+        if [[ $line =~ ^[^[:space:]]+[[:space:]]-[[:space:]][^[:space:]]+[[:space:]][^[:space:]]+[[:space:]].*valid$ ]]; then
             local file_path
-            file_path=$(echo "$line" | cut -d' ' -f1)
+            file_path=$(echo "$line" | awk '{print $1}')
             local resource_type
-            resource_type=$(echo "$line" | cut -d' ' -f3)
-            local resource_name
-            resource_name=$(echo "$line" | cut -d' ' -f4)
+            resource_type=$(echo "$line" | awk '{print $3}')
             
             [[ ${#file_path} -gt $max_file_length ]] && max_file_length=${#file_path}
             [[ ${#resource_type} -gt $max_resource_length ]] && max_resource_length=${#resource_type}
@@ -293,15 +211,15 @@ run_kubeconform() {
 
     # Second pass to format and align the output
     while IFS= read -r line; do
-        if [[ $line =~ ^./.*valid$ ]]; then
+        if [[ $line =~ ^[^[:space:]]+[[:space:]]-[[:space:]][^[:space:]]+[[:space:]][^[:space:]]+[[:space:]].*valid$ ]]; then
             local file_path
-            file_path=$(echo "$line" | cut -d' ' -f1)
+            file_path=$(echo "$line" | awk '{print $1}')
             local resource_type
-            resource_type=$(echo "$line" | cut -d' ' -f3)
+            resource_type=$(echo "$line" | awk '{print $3}')
             local resource_name
-            resource_name=$(echo "$line" | cut -d' ' -f4)
+            resource_name=$(echo "$line" | awk '{print $4}')
             local status
-            status=$(echo "$line" | cut -d' ' -f6-)
+            status=$(echo "$line" | awk '{$1=$2=$3=$4=""; print $0}' | sed 's/^[ \t]*//') # Get the rest of the line as status
             
             printf -v aligned_line "%-*s - %-*s %-30s %s\n" "$max_file_length" "$file_path" "$max_resource_length" "$resource_type" "$resource_name" "$status"
             aligned_output+="$aligned_line"
@@ -319,7 +237,7 @@ run_kubeconform() {
     # Parse summary
     if [[ $summary =~ ([0-9]+)[[:space:]]resources[[:space:]]found[[:space:]]in[[:space:]]([0-9]+)[[:space:]]files[[:space:]]-[[:space:]]Valid:[[:space:]]([0-9]+),[[:space:]]Invalid:[[:space:]]([0-9]+),[[:space:]]Errors:[[:space:]]([0-9]+),[[:space:]]Skipped:[[:space:]]([0-9]+) ]]; then
         local total_resources="${BASH_REMATCH[1]}"
-        local total_files="${BASH_REMATCH[2]}"
+        # local total_files="${BASH_REMATCH[2]}" # unused variable
         local valid_resources="${BASH_REMATCH[3]}"
         local invalid_resources="${BASH_REMATCH[4]}"
         local error_resources="${BASH_REMATCH[5]}"
@@ -332,7 +250,7 @@ run_kubeconform() {
         KUBECONFORM_TOTAL=0
         KUBECONFORM_PASSED=0
         KUBECONFORM_FAILED=0
-        echo "DEBUG: Regex did not match"
+        log 2 "DEBUG: Regex did not match Kubeconform summary: $summary"
     fi
 }
 
@@ -340,88 +258,96 @@ colorize_kubescore_output() {
     local line="$1"
     if [[ $line == *"[CRITICAL]"* ]]; then
         echo -e "${RED}${line}${NC}"
+    elif [[ $line == *"[WARN]"* ]]; then # Also colorize warnings
+        echo -e "${YELLOW}${line}${NC}"
     else
         echo "$line"
     fi
 }
 # Modify run_kubescore function
 run_kubescore() {
-    local files=("$@")
-    local total_files=${#files[@]}
+    local files_to_scan=("$@") # Use a different name to avoid confusion
+    local total_files_to_scan=${#files_to_scan[@]}
     local validated_files=0
 
-    KUBESCORE_TOTAL=$total_files
+    # Initialize counts at the beginning of the function
+    KUBESCORE_TOTAL=0
     KUBESCORE_PASSED=0
     KUBESCORE_FAILED=0
     KUBESCORE_WARNINGS=0
 
-    KUBESCORE_OUTPUT="Running Kube-score on $total_files file(s)...\n"
+    KUBESCORE_OUTPUT="Running Kube-score on $total_files_to_scan file(s)...\n"
 
-    for file in "${files[@]}"; do
+    for file in "${files_to_scan[@]}"; do
         ((validated_files++))
-        show_progress "$validated_files" "$total_files" "Kube-score"
+        show_progress "$validated_files" "$total_files_to_scan" "Kube-score"
 
         local output
         output=$(kube-score score --ignore-test pod-probes "$file" 2>&1)
-
 
         local critical_count
         critical_count=$(echo "$output" | grep -c "\[CRITICAL\]")
         local warning_count
         warning_count=$(echo "$output" | grep -c "\[WARN\]")
 
-        ((KUBESCORE_TOTAL++))
+        ((KUBESCORE_TOTAL++)) # Increment total for each file processed
 
         if [ "$critical_count" -eq 0 ] && [ "$warning_count" -eq 0 ]; then
             ((KUBESCORE_PASSED++))
             KUBESCORE_OUTPUT+="✓ $file passed Kube-score\n"
         elif [ "$critical_count" -eq 0 ]; then
-            ((KUBESCORE_WARNINGS++))
+            # Only warnings, not a failure for the summary, but increment warnings
             KUBESCORE_OUTPUT+="! $file has Kube-score warnings\n"
+             ((KUBESCORE_WARNINGS += warning_count)) # Add to existing warnings
         else
             ((KUBESCORE_FAILED++))
             KUBESCORE_OUTPUT+="✗ $file failed Kube-score\n"
+            # If there are critical errors, still count warnings for detailed output
+            ((KUBESCORE_WARNINGS += warning_count))
         fi
+
+        # Detailed output based on verbosity
         if [ "$VERBOSITY" -ge 2 ]; then
             while IFS= read -r line; do
                 KUBESCORE_OUTPUT+="$(colorize_kubescore_output "$line")\n"
             done <<< "$output"
         elif [ "$VERBOSITY" -ge 1 ]; then
+             # Only show lines with CRITICAL or WARN for normal verbosity
             while IFS= read -r line; do
                 if [[ "$line" =~ \[CRITICAL\]|\[WARN\] ]]; then
                     KUBESCORE_OUTPUT+="$(colorize_kubescore_output "$line")\n"
                 fi
             done <<< "$output"
         fi
-
-        ((KUBESCORE_WARNINGS += warning_count))
     done
+    # Ensure progress indicator is cleared
+    log 1 ""
 }
 
 # Function to print test results
 print_test_results() {
-    print_header "ShellCheck Results"
+    log 1 "\n${BLUE}======== ShellCheck Results ========${NC}"
     echo -e "$SHELLCHECK_OUTPUT"
-    echo -e "${BLUE}ShellCheck Summary:${NC}"
-    echo -e "Total: $SHELLCHECK_TOTAL, Passed: $SHELLCHECK_PASSED, Failed: $SHELLCHECK_FAILED, Warnings: $SHELLCHECK_WARNINGS\n"
+    log 1 "${BLUE}ShellCheck Summary:${NC}"
+    log 1 "Total: $SHELLCHECK_TOTAL, Passed: $SHELLCHECK_PASSED, Failed: $SHELLCHECK_FAILED, Warnings: $SHELLCHECK_WARNINGS\n"
 
-    print_header "Kubeconform Results"
+    log 1 "\n${BLUE}======== Kubeconform Results ========${NC}"
     echo -e "$KUBECONFORM_OUTPUT"
-    echo -e "${BLUE}Kubeconform Summary:${NC}"
-    echo -e "Total: $KUBECONFORM_TOTAL, Passed: $KUBECONFORM_PASSED, Failed: $KUBECONFORM_FAILED\n"
+    log 1 "${BLUE}Kubeconform Summary:${NC}"
+    log 1 "Total: $KUBECONFORM_TOTAL, Passed: $KUBECONFORM_PASSED, Failed: $KUBECONFORM_FAILED\n"
 
-    print_header "Kube-score Results"
+    log 1 "\n${BLUE}======== Kube-score Results ========${NC}"
     echo -e "$KUBESCORE_OUTPUT"
-    echo -e "${BLUE}Kube-score Summary:${NC}"
-    echo -e "Total: $KUBESCORE_TOTAL, Passed: $KUBESCORE_PASSED, Failed: $KUBESCORE_FAILED, Warnings: $KUBESCORE_WARNINGS\n"
+    log 1 "${BLUE}Kube-score Summary:${NC}"
+    log 1 "Total: $KUBESCORE_TOTAL, Passed: $KUBESCORE_PASSED, Failed: $KUBESCORE_FAILED, Warnings: $KUBESCORE_WARNINGS\n"
 }
 
 print_summary() {
-    echo -e "\n${BLUE}Test Summary:${NC}"
+    log 1 "\n${BLUE}Test Summary:${NC}"
 
-    add_test_suite_results "ShellCheck" "$SHELLCHECK_TOTAL" "$SHELLCHECK_PASSED" "$SHELLCHECK_FAILED" $SHELLCHECK_WARNINGS
-    add_test_suite_results "Kubeconform" $KUBECONFORM_TOTAL $KUBECONFORM_PASSED $KUBECONFORM_FAILED 0
-    add_test_suite_results "Kube-score" "$KUBESCORE_TOTAL" "$KUBESCORE_PASSED" "$KUBESCORE_FAILED" $KUBESCORE_WARNINGS
+    add_test_suite_results "ShellCheck" "$SHELLCHECK_TOTAL" "$SHELLCHECK_PASSED" "$SHELLCHECK_FAILED" "$SHELLCHECK_WARNINGS"
+    add_test_suite_results "Kubeconform" "$KUBECONFORM_TOTAL" "$KUBECONFORM_PASSED" "$KUBECONFORM_FAILED" "0" # Kubeconform doesn't have warnings in this script's context
+    add_test_suite_results "Kube-score" "$KUBESCORE_TOTAL" "$KUBESCORE_PASSED" "$KUBESCORE_FAILED" "$KUBESCORE_WARNINGS"
 
     read -r max_name_width max_number_width < <(calculate_max_widths)
 
@@ -433,45 +359,90 @@ print_summary() {
 
 
 main() {
-
-    local targets=("$@")
-
-    if [ ${#targets[@]} -eq 0 ]; then
-        mapfile -t targets < <(find . -name "*.yaml" -type f)
+    # Check for required tools
+    local missing_tools=false
+    if ! command -v shellcheck &> /dev/null; then
+        log 1 "${RED}ShellCheck is not installed. Please install it to continue.${NC}"
+        log 1 "Installation instructions: https://github.com/koalaman/shellcheck#installing"
+        missing_tools=true
+    fi
+    if ! command -v kubeconform &> /dev/null; then
+        log 1 "${RED}Kubeconform is not installed. Please install it to continue.${NC}"
+        log 1 "Installation instructions: https://github.com/yannh/kubeconform#installation"
+        missing_tools=true
+    fi
+    if ! command -v kube-score &> /dev/null; then
+        log 1 "${RED}Kube-score is not installed. Please install it to continue.${NC}"
+        log 1 "Installation instructions: https://github.com/zegl/kube-score#installation"
+        missing_tools=true
     fi
 
-    run_shellcheck
+    if [ "$missing_tools" = true ]; then
+        exit 1
+    fi
 
-    # Filter out ignored files
-    local filtered_targets=()
-    for target in "${targets[@]}"; do
-        if [[ ! "$target" =~ \.github/|\.release-please|\.terraform/|kustomization\.yaml|kubeconfig\.yaml ]]; then
-            filtered_targets+=("$target")
+    local targets_args=("$@")
+    local k8s_files_to_scan=()
+
+    if [ ${#targets_args[@]} -eq 0 ]; then
+        # Find all .yaml files if no specific targets are given
+        mapfile -t k8s_files_to_scan < <(find . -name "*.yaml" -type f)
+    else
+        # Process provided arguments: if it's a directory, find yaml files in it, otherwise assume it's a file
+        for arg in "${targets_args[@]}"; do
+            if [ -d "$arg" ]; then
+                mapfile -t found_files < <(find "$arg" -name "*.yaml" -type f)
+                for ff in "${found_files[@]}"; do
+                     k8s_files_to_scan+=("$ff")
+                done
+            elif [ -f "$arg" ]; then
+                k8s_files_to_scan+=("$arg")
+            else
+                log 1 "${YELLOW}Warning: Argument '$arg' is not a valid file or directory. Skipping.${NC}"
+            fi
+        done
+    fi
+
+    run_shellcheck # Runs on all scripts in ./scripts/
+
+    # Filter out ignored files for k8s scans
+    local filtered_k8s_files=()
+    for target_file in "${k8s_files_to_scan[@]}"; do
+        if [[ ! "$target_file" =~ \.github/|\.release-please|\.terraform/|kustomization\.yaml|kubeconfig\.yaml ]]; then
+            filtered_k8s_files+=("$target_file")
         else
-            echo -e "${YELLOW}Skipping ignored file: $target${NC}"
+            log 1 "${YELLOW}Skipping K8s scan for ignored file: $target_file${NC}"
         fi
     done
 
-    # Run Kubeconform and Kube-score on filtered targets
-    run_kubeconform "${filtered_targets[@]}"
-    run_kubescore "${filtered_targets[@]}"
+    # Run Kubeconform and Kube-score on filtered k8s files
+    if [ ${#filtered_k8s_files[@]} -gt 0 ]; then
+      run_kubeconform "${filtered_k8s_files[@]}"
+      run_kubescore "${filtered_k8s_files[@]}"
+    else
+      log 1 "${YELLOW}No Kubernetes files to scan after filtering.${NC}"
+      # Initialize Kubeconform and Kube-score results as empty/passed if no files
+      KUBECONFORM_TOTAL=0 KUBECONFORM_PASSED=0 KUBECONFORM_FAILED=0
+      KUBESCORE_TOTAL=0 KUBESCORE_PASSED=0 KUBESCORE_FAILED=0 KUBESCORE_WARNINGS=0
+    fi
+
 
     # Print test results
     print_test_results
     print_summary
 
     # Determine overall test status
-    local total_failed=$((SHELLCHECK_FAILED + KUBECONFORM_FAILED + KUBESCORE_FAILED))
-    local total_warnings=$((SHELLCHECK_WARNINGS + KUBESCORE_WARNINGS))
+    local total_failed=$(( ${SHELLCHECK_FAILED:-0} + ${KUBECONFORM_FAILED:-0} + ${KUBESCORE_FAILED:-0} ))
+    local total_warnings=$(( ${SHELLCHECK_WARNINGS:-0} + ${KUBESCORE_WARNINGS:-0} )) # Kubeconform warnings are not explicitly tracked here
 
     if (( total_failed == 0 && total_warnings == 0 )); then
-        echo -e "${GREEN}All tests passed successfully!${NC}"
+        log 1 "${GREEN}All tests passed successfully!${NC}"
         exit 0
     elif (( total_failed == 0 )); then
-        echo -e "${YELLOW}All tests passed, but there are warnings. Please review the output above.${NC}"
-        exit 0
+        log 1 "${YELLOW}All tests passed, but there are warnings. Please review the output above.${NC}"
+        exit 0 # Still exit 0 if only warnings
     else
-        echo -e "${RED}Some tests failed. Please review the output above.${NC}"
+        log 1 "${RED}Some tests failed. Please review the output above.${NC}"
         exit 1
     fi
 }

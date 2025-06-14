@@ -18,6 +18,7 @@ spec:
       containers:
       - name: personal-site
         image: ghcr.io/zaneriley/personal-site:v0.3.2-alpha.1
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
         envFrom:
@@ -31,6 +32,24 @@ spec:
             configMapKeyRef:
               name: personal-site-config
               key: POSTGRES_PORT
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+            ephemeral-storage: "1Gi"
+          limits:
+            cpu: "100m"
+            memory: "256Mi"
+            ephemeral-storage: "2Gi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10002
+          runAsGroup: 10002
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -52,6 +71,7 @@ spec:
       containers:
       - name: personal-site
         image: ghcr.io/zaneriley/personal-site:v0.3.2-alpha.1
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
         envFrom:
@@ -59,3 +79,21 @@ spec:
             name: personal-site-config
         - secretRef:
             name: personal-site-secrets
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "128Mi"
+            ephemeral-storage: "1Gi"
+          limits:
+            cpu: "100m"
+            memory: "256Mi"
+            ephemeral-storage: "2Gi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10002
+          runAsGroup: 10002
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Intentionally unused variable for CI test
+unused_var="test"
+
 #!/bin/bash
 
 # ANSI color codes

@@ -1,0 +1,44 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint-and-validate:
+    name: Lint and Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Install Kubeconform
+        env:
+          KUBECONFORM_VERSION: "0.6.6"
+        run: |
+          wget "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar xf "kubeconform-linux-amd64.tar.gz"
+          sudo mv kubeconform /usr/local/bin
+          rm "kubeconform-linux-amd64.tar.gz"
+
+      - name: Install Kube-score
+        env:
+          KUBESCORE_VERSION: "1.18.0"
+        run: |
+          wget "https://github.com/zegl/kube-score/releases/download/v${KUBESCORE_VERSION}/kube-score_${KUBESCORE_VERSION}_linux_amd64"
+          chmod +x "kube-score_${KUBESCORE_VERSION}_linux_amd64"
+          sudo mv "kube-score_${KUBESCORE_VERSION}_linux_amd64" /usr/local/bin/kube-score
+
+      - name: Make lint-and-validate.sh executable
+        run: chmod +x scripts/lint-and-validate.sh
+
+      - name: Run lint-and-validate.sh
+        run: bash scripts/lint-and-validate.sh

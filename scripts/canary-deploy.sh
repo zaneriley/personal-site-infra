@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# This is a test comment.
 weight=$1
 
 if [ -z "$weight" ]; then
