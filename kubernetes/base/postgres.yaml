@@ -16,6 +16,7 @@ spec:
       containers:
       - name: postgres
         image: postgres:16.0-bookworm
+        imagePullPolicy: Always
         ports:
         - containerPort: 5432
         env:
@@ -45,6 +46,23 @@ spec:
             command: ["pg_isready", "-U", "$(POSTGRES_USER)"]
           initialDelaySeconds: 15
           periodSeconds: 20
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+            ephemeral-storage: "1Gi"
+          limits:
+            cpu: "200m"
+            memory: "512Mi"
+            ephemeral-storage: "2Gi"
+        securityContext:
+          runAsUser: 10001
+          runAsGroup: 10001
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
       volumes:
       - name: postgres-storage
         persistentVolumeClaim:
