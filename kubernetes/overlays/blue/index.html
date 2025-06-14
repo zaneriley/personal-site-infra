@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blue Version</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+            background-color: #E3F2FD;
+            color: #1A237E;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-image: linear-gradient(45deg, #BBDEFB 25%, transparent 25%, transparent 75%, #BBDEFB 75%, #BBDEFB), 
+                              linear-gradient(45deg, #BBDEFB 25%, transparent 25%, transparent 75%, #BBDEFB 75%, #BBDEFB);
+            background-size: 60px 60px;
+            background-position: 0 0, 30px 30px;
+        }
+        .container {
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 2rem 3rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 80%;
+            animation: fadeIn 1s ease-out;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+        p {
+            font-size: 1.2rem;
+            line-height: 1.6;
+        }
+        .version {
+            font-weight: bold;
+            color: #1565C0;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @media (max-width: 600px) {
+            .container {
+                padding: 1.5rem 2rem;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+            p {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to Our Site</h1>
+        <p>You are currently viewing the <span class="version">BLUE</span> version of our application.</p>
+        <p>This page is part of our blue/green deployment strategy.</p>
+    </div>
+</body>
+</html>

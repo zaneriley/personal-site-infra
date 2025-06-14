@@ -30,6 +30,34 @@ check_dependencies() {
     log "All dependencies are installed."
 }
 
+setup_port_forwarding() {
+    local service_name=$1
+    local local_port=$2
+    local remote_port=$3
+    local namespace=$4
+
+    log "Setting up port forwarding for $service_name from local port $local_port to remote port $remote_port..."
+    kubectl port-forward -n "$namespace" svc/"$service_name" "$local_port":"$remote_port" &> /tmp/port-forwarding.log &
+    local pf_pid=$!
+    sleep 2  # Give it a moment to establish or fail
+
+    if ! ps -p $pf_pid > /dev/null; then
+        error "Failed to set up port forwarding. Check /tmp/port-forwarding.log for details."
+        return 1
+    else
+        log "Port forwarding set up successfully. PID: $pf_pid"
+        echo "You can now access your service at http://localhost:$local_port"
+        return 0
+    fi
+}
+
+check_postgres_logs() {
+    local namespace=$1
+    log "Checking PostgreSQL logs..."
+    kubectl logs -n "$namespace" -l app=postgres --tail=50
+}
+# MAIN FUNCTIONS
+
 # Function to set up the development environment
 setup() {
     log "Setting up development environment..."
@@ -55,6 +83,20 @@ setup() {
 dev() {
     log "Starting development environment..."
     check_dependencies
+
+    # Check if K3s is running and attempt recovery if not
+    if ! systemctl is-active --quiet k3s; then
+        warn "K3s is not active. Attempting to start it..."
+        sudo systemctl restart k3s
+        # Wait a brief moment for the service to restart
+        sleep 5
+        if systemctl is-active --quiet k3s; then
+            log "K3s recovered successfully."
+        else
+            error "Failed to recover K3s. Please check the system logs."
+            exit 1
+        fi
+    fi
 
     # Check if kubeconfig file exists and is readable
     if [ ! -r "/etc/rancher/k3s/k3s.yaml" ]; then
@@ -111,10 +153,11 @@ dev() {
         exit 1
     fi
 
+    local HTTP_PORT=$(kubectl get configmap personal-site-config -n personal-site -o=jsonpath='{.data.http-port}')
+
     # Port forward to make the service accessible
     log "Setting up port forwarding..."
-    if ! kubectl port-forward -n personal-site svc/personal-site-green 8000:80 &>/dev/null; then
-        error "Failed to set up port forwarding. Check if the service exists and is running."
+    if ! setup_port_forwarding "personal-site-green" 8000 "$HTTP_PORT" "personal-site"; then
         exit 1
     fi
 
@@ -122,18 +165,18 @@ dev() {
 }
 
 # Function to run tests
-test() {
-    log "Running tests..."
+lint() {
+    log "Linting Kubernetes files and shell scripts..."
     
-    # Run Kubeconform tests
-    if ./scripts/test.sh; then
-        log "All Kubeconform tests passed successfully."
+    # Run Kubeconform lints
+    if ./scripts/lint-and-validate.sh; then
+        log "All Kubeconform lints passed successfully."
     else
-        error "Some Kubeconform tests failed. Please review the output above."
+        error "Some Kubeconform lints failed. Please review the output above."
         return 1
     fi
 
-    log "All tests completed successfully."
+    log "All linting completed successfully."
 }
 
 # Function to deploy
@@ -196,7 +239,7 @@ show_help() {
     echo "  setup         - Set up the development environment"
     echo "  dev           - Start the development environment"
     echo "  stop          - Stop the k3s service"
-    echo "  test          - Run all tests"
+    echo "  lint          - Lint Kubernetes files and shells cripts."
     echo "  deploy [env]  - Deploy to specified environment (local, staging, production)"
     echo "  canary [%]    - Implement canary deployment with specified percentage"
     echo "  switch        - Switch deployment (use after canary)"
@@ -221,8 +264,8 @@ case "${1:-help}" in
     stop)
         stop
         ;;
-    test)
-        test
+    lint)
+        lint
         ;;
     deploy)
         deploy "${2:-local}"
