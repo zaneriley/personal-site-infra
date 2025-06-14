@@ -14,3 +14,4 @@ data:
   CSP_INTERNAL_NETWORK: "192.168.11.20"
   POSTGRES_HOST: postgres
   POSTGRES_PORT: "5432" # Prevents a conflict with the default k8s vars
+  APP_CONTAINER_PORT: "8000"
